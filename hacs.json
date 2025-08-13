@@ -1,0 +1,8 @@
+{
+  "name": "Damper Thermostat",
+  "content_in_root": false,
+  "filename": "damper_thermostat.zip",
+  "render_readme": true,
+  "domains": ["climate"],
+  "homeassistant": "2023.1.0"
+}

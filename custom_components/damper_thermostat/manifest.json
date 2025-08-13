@@ -1,0 +1,15 @@
+{
+  "domain": "damper-thermostat",
+  "name": "Damper Thermostat",
+  "codeowners": ["@ssalahi"],
+  "config_flow": false,
+  "dependencies": [],
+  "documentation": "https://github.com/ssalahi/damper-thermostat",
+  "homeassistant": "2023.1.0",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/ssalahi/damper-thermostat/issues",
+  "quality_scale": "silver",
+  "requirements": [],
+  "version": "1.0.0"
+}

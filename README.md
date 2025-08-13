@@ -40,12 +40,80 @@ A custom Home Assistant component that creates an advanced thermostat device wit
 
 ## Configuration
 
-### Via UI (Recommended)
+### Adding a New Damper Thermostat Device
 
-1. Go to Settings → Devices & Services
-2. Click "Add Integration"
-3. Search for "Damper Thermostat"
-4. Follow the configuration steps
+After installing the component, follow these steps to add a new thermostat device:
+
+#### Step 1: Access Integrations
+1. Open Home Assistant web interface
+2. Go to **Settings** → **Devices & Services**
+3. Click the **"+ ADD INTEGRATION"** button (bottom right)
+
+#### Step 2: Find the Integration
+1. In the search box, type **"Damper Thermostat"**
+2. Click on **"Damper Thermostat"** when it appears in the list
+3. If you don't see it, make sure you've restarted Home Assistant after installation
+
+#### Step 3: Configure Your Thermostat
+You'll be presented with a configuration form. Fill in the following:
+
+**Required Fields:**
+- **Name**: Give your thermostat a name (e.g., "Living Room Damper", "Bedroom Zone Control")
+- **Temperature Sensor**: Select an existing temperature sensor entity (e.g., `sensor.living_room_temperature`)
+- **Actuator Switch**: Select a switch entity that controls your heating/cooling device (e.g., `switch.heater_relay`)
+
+**Optional Fields:**
+- **Humidity Sensor**: Select a humidity sensor if you have one (e.g., `sensor.living_room_humidity`)
+- **Main Thermostat**: Select your main HVAC thermostat if you want coordination (e.g., `climate.main_hvac`)
+- **Cold Tolerance**: Temperature difference before heating activates (default: 0.5°F)
+- **Hot Tolerance**: Temperature difference before cooling activates (default: 0.5°F)
+- **Min/Max Temperature**: Set the temperature range limits
+- **Initial Target Temperature**: Starting temperature when first created
+- **Temperature Precision**: How precise temperature adjustments should be (0.1, 0.5, or 1.0)
+- **Initial HVAC Mode**: Starting mode (Heat, Cool, Auto, or Off)
+
+#### Step 4: Complete Setup
+1. Click **"Submit"** to create the thermostat
+2. The new thermostat device will appear in your Devices & Services list
+3. You can now find it in the Climate section of your dashboard
+
+### Prerequisites
+
+Before adding the integration, make sure you have:
+
+1. **Temperature Sensor**: Any sensor entity that reports temperature (required)
+   ```yaml
+   # Example temperature sensor
+   sensor:
+     - platform: template
+       sensors:
+         room_temperature:
+           friendly_name: "Room Temperature"
+           unit_of_measurement: "°F"
+           value_template: "{{ states('sensor.your_temp_sensor') }}"
+   ```
+
+2. **Switch Entity**: A switch that controls your heating/cooling device (required)
+   ```yaml
+   # Example switch for heater control
+   switch:
+     - platform: template
+       switches:
+         room_heater:
+           friendly_name: "Room Heater"
+           turn_on:
+             service: switch.turn_on
+             target:
+               entity_id: switch.heater_relay
+           turn_off:
+             service: switch.turn_off
+             target:
+               entity_id: switch.heater_relay
+   ```
+
+3. **Humidity Sensor** (optional): Any sensor entity that reports humidity percentage
+
+4. **Main Thermostat** (optional): An existing climate entity if you want coordination
 
 ### Configuration Options
 

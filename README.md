@@ -77,6 +77,24 @@ You'll be presented with a configuration form. Fill in the following:
 2. The new thermostat device will appear in your Devices & Services list
 3. You can now find it in the Climate section of your dashboard
 
+### Editing Configuration After Setup
+
+You can modify certain settings after the initial setup:
+
+1. Go to **Settings** → **Devices & Services**
+2. Find your **Damper Thermostat** integration
+3. Click **"Configure"** (gear icon)
+4. Modify any of the following settings:
+   - Cold Tolerance
+   - Hot Tolerance
+   - Minimum Temperature
+   - Maximum Temperature
+   - Target Temperature
+   - Temperature Precision
+   - HVAC Mode
+
+**Note**: All settings including entity selections can be changed after initial setup. Changes take effect immediately after saving.
+
 ### Prerequisites
 
 Before adding the integration, make sure you have:

@@ -34,6 +34,31 @@ Fill out the form with:
 - Your new thermostat will appear in Devices & Services
 - Find it in your Climate dashboard section
 
+## Editing Configuration
+
+After setup, you can modify settings:
+
+### How to Edit Settings
+1. Go to **Settings** → **Devices & Services**
+2. Find **Damper Thermostat** integration
+3. Click **"Configure"** (gear icon)
+4. Update any configurable settings
+
+### What Can Be Changed
+- ✅ Name
+- ✅ Temperature Sensor
+- ✅ Humidity Sensor
+- ✅ Actuator Switch
+- ✅ Main Thermostat
+- ✅ Cold Tolerance
+- ✅ Hot Tolerance  
+- ✅ Min/Max Temperature
+- ✅ Target Temperature
+- ✅ Temperature Precision
+- ✅ HVAC Mode
+
+**Note**: All settings can be changed after initial setup. Changes take effect immediately after saving.
+
 ## Common Entity Examples
 
 ### Temperature Sensors

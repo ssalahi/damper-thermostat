@@ -1,25 +1,22 @@
-### 3. Info File for HACS
-**File:** `info.md`
-
-```markdown
 # Damper Thermostat
 
-An advanced thermostat component for Home Assistant with features beyond the standard Generic Thermostat.
+A custom Home Assistant component that creates an advanced thermostat device with enhanced features beyond the standard Generic Thermostat.
 
 ## Key Features
 
-- **Multiple HVAC Modes**: Heat, Cool, Auto, and Off modes
-- **Sensor Integration**: Temperature and humidity sensor support
-- **Main Thermostat Integration**: Display status from another thermostat
-- **Configurable Tolerances**: Separate cold and heat tolerance settings
-- **Away Mode**: Energy-saving preset with custom temperature
-- **Auto Mode**: Intelligent switching between heating and cooling
+- **Multiple HVAC Modes**: Heat, Cool, Auto, and Off
+- **Temperature & Humidity Sensors**: External sensor integration
+- **Actuator Control**: Switch-based heating/cooling control
+- **Main Thermostat Integration**: Coordinate with existing HVAC systems
+- **Configurable Tolerances**: Separate hot/cold tolerance settings
+- **Easy Setup**: User-friendly configuration flow
 
-## Quick Setup
+## Perfect For
 
-1. Install via HACS
-2. Add to configuration.yaml
-3. Restart Home Assistant
-4. Configure your sensors and switches
+- Zone control systems
+- Supplemental heating/cooling
+- Smart damper control
+- Room-specific climate control
+- Integration with existing HVAC systems
 
-Perfect for smart home setups where you need more control than the basic Generic Thermostat provides!
+This component is ideal for users who need more advanced thermostat functionality than the built-in Generic Thermostat provides, especially when coordinating multiple climate zones or integrating with existing HVAC systems.

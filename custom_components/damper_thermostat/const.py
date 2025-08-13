@@ -1,26 +1,41 @@
-"""Constants for Damper Thermostat."""
+"""Constants for the Damper Thermostat integration."""
+from homeassistant.components.climate.const import (
+    HVACMode,
+    ClimateEntityFeature,
+)
 
 DOMAIN = "damper_thermostat"
 
-DEFAULT_TOLERANCE = 0.3
-DEFAULT_NAME = "Damper Thermostat"
-
-CONF_HEATER = "heater"
-CONF_SENSOR = "target_sensor"
+# Configuration keys
+CONF_TEMPERATURE_SENSOR = "temperature_sensor"
 CONF_HUMIDITY_SENSOR = "humidity_sensor"
+CONF_ACTUATOR_SWITCH = "actuator_switch"
 CONF_MAIN_THERMOSTAT = "main_thermostat"
+CONF_COLD_TOLERANCE = "cold_tolerance"
+CONF_HOT_TOLERANCE = "hot_tolerance"
 CONF_MIN_TEMP = "min_temp"
 CONF_MAX_TEMP = "max_temp"
 CONF_TARGET_TEMP = "target_temp"
-CONF_AC_MODE = "ac_mode"
-CONF_MIN_DUR = "min_cycle_duration"
-CONF_COLD_TOLERANCE = "cold_tolerance"
-CONF_HOT_TOLERANCE = "hot_tolerance"
-CONF_KEEP_ALIVE = "keep_alive"
-CONF_INITIAL_HVAC_MODE = "initial_hvac_mode"
-CONF_AWAY_TEMP = "away_temp"
 CONF_PRECISION = "precision"
+CONF_INITIAL_HVAC_MODE = "initial_hvac_mode"
 
+# Default values
+DEFAULT_TOLERANCE = 0.5
+DEFAULT_MIN_TEMP = 60
+DEFAULT_MAX_TEMP = 80
+DEFAULT_TARGET_TEMP = 70
+DEFAULT_PRECISION = 0.1
+
+# Supported features
 SUPPORT_FLAGS = (
-    "TARGET_TEMPERATURE | TURN_OFF | TURN_ON | PRESET_MODE"
+    ClimateEntityFeature.TARGET_TEMPERATURE
+    | ClimateEntityFeature.TARGET_HUMIDITY
 )
+
+# Supported HVAC modes
+HVAC_MODES = [
+    HVACMode.HEAT,
+    HVACMode.COOL,
+    HVACMode.AUTO,
+    HVACMode.OFF,
+]

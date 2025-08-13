@@ -1,176 +1,129 @@
-"""
-Damper Thermostat Integration for Home Assistant
-A custom thermostat component with advanced features extending Generic Thermostat functionality.
-"""
+"""Support for Damper Thermostat."""
+from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import timedelta
-from typing import Any, Dict, List, Optional
-from const import *
+from typing import Any
 
-import voluptuous as vol
-
-from homeassistant.components.climate import (
-    PLATFORM_SCHEMA,
-    ClimateEntity
-)
+from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate.const import (
-    ATTR_HVAC_MODE,
-    ATTR_PRESET_MODE,
-    PRESET_AWAY,
-    PRESET_NONE,
     ClimateEntityFeature,
     HVACAction,
-    HVACMode
+    HVACMode,
 )
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
-    ATTR_ENTITY_ID,
     ATTR_TEMPERATURE,
     CONF_NAME,
-    CONF_UNIQUE_ID,
     EVENT_HOMEASSISTANT_START,
+    PRECISION_HALVES,
+    PRECISION_TENTHS,
+    PRECISION_WHOLE,
     SERVICE_TURN_OFF,
     SERVICE_TURN_ON,
-    STATE_ON,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
     UnitOfTemperature,
 )
-from homeassistant.core import DOMAIN as HA_DOMAIN, CoreState, HomeAssistant, callback
-from homeassistant.helpers import condition
-import homeassistant.helpers.config_validation as cv
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
 )
-from homeassistant.helpers.reload import async_setup_reload_service
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.util.unit_conversion import TemperatureConverter
+import homeassistant.util.dt as dt_util
+
+from .const import (
+    DOMAIN,
+    CONF_TEMPERATURE_SENSOR,
+    CONF_HUMIDITY_SENSOR,
+    CONF_ACTUATOR_SWITCH,
+    CONF_MAIN_THERMOSTAT,
+    CONF_COLD_TOLERANCE,
+    CONF_HOT_TOLERANCE,
+    CONF_MIN_TEMP,
+    CONF_MAX_TEMP,
+    CONF_TARGET_TEMP,
+    CONF_PRECISION,
+    CONF_INITIAL_HVAC_MODE,
+    DEFAULT_TOLERANCE,
+    DEFAULT_MIN_TEMP,
+    DEFAULT_MAX_TEMP,
+    DEFAULT_TARGET_TEMP,
+    DEFAULT_PRECISION,
+    SUPPORT_FLAGS,
+    HVAC_MODES,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
-    {
-        vol.Required(CONF_HEATER): cv.entity_id,
-        vol.Required(CONF_SENSOR): cv.entity_id,
-        vol.Optional(CONF_HUMIDITY_SENSOR): cv.entity_id,
-        vol.Optional(CONF_MAIN_THERMOSTAT): cv.entity_id,
-        vol.Optional(CONF_AC_MODE, default=False): cv.boolean,
-        vol.Optional(CONF_MAX_TEMP): vol.Coerce(float),
-        vol.Optional(CONF_MIN_TEMP): vol.Coerce(float),
-        vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
-        vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): vol.Coerce(float),
-        vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): vol.Coerce(float),
-        vol.Optional(CONF_TARGET_TEMP): vol.Coerce(float),
-        vol.Optional(CONF_KEEP_ALIVE): vol.All(cv.time_period, cv.positive_timedelta),
-        vol.Optional(CONF_INITIAL_HVAC_MODE): vol.In(
-            [HVACMode.COOL, HVACMode.HEAT, HVACMode.OFF]
-        ),
-        vol.Optional(CONF_AWAY_TEMP): vol.Coerce(float),
-        vol.Optional(CONF_PRECISION): vol.In(
-            [UnitOfTemperature.CELSIUS, UnitOfTemperature.FAHRENHEIT]
-        ),
-        vol.Optional(CONF_UNIQUE_ID): cv.string,
-    }
-)
+PRECISION_MAPPING = {
+    PRECISION_TENTHS: 0.1,
+    PRECISION_HALVES: 0.5,
+    PRECISION_WHOLE: 1.0,
+}
 
 
-async def async_setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
-    async_add_entities,
-    discovery_info: DiscoveryInfoType = None,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the damper thermostat platform."""
-    await async_setup_reload_service(hass, DOMAIN, ["climate"])
-    async_add_entities(
-        [
-            DamperThermostat(
-                hass,
-                config[CONF_NAME],
-                config[CONF_HEATER],
-                config[CONF_SENSOR],
-                config.get(CONF_HUMIDITY_SENSOR),
-                config.get(CONF_MAIN_THERMOSTAT),
-                config.get(CONF_MIN_TEMP),
-                config.get(CONF_MAX_TEMP),
-                config[CONF_TARGET_TEMP],
-                config[CONF_AC_MODE],
-                config[CONF_COLD_TOLERANCE],
-                config[CONF_HOT_TOLERANCE],
-                config.get(CONF_KEEP_ALIVE),
-                config.get(CONF_INITIAL_HVAC_MODE),
-                config.get(CONF_AWAY_TEMP),
-                config.get(CONF_PRECISION),
-                config.get(CONF_UNIQUE_ID),
-            )
-        ]
-    )
+    """Set up the Damper Thermostat platform."""
+    config = hass.data[DOMAIN][config_entry.entry_id]
+    
+    async_add_entities([DamperThermostat(hass, config, config_entry.entry_id)])
 
 
 class DamperThermostat(ClimateEntity, RestoreEntity):
-    """Damper thermostat with additional features."""
+    """Representation of a Damper Thermostat device."""
 
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        name: str,
-        heater_entity_id: str,
-        sensor_entity_id: str,
-        humidity_sensor_entity_id: Optional[str],
-        main_thermostat_entity_id: Optional[str],
-        min_temp: Optional[float],
-        max_temp: Optional[float],
-        target_temp: Optional[float],
-        ac_mode: bool,
-        cold_tolerance: float,
-        hot_tolerance: float,
-        keep_alive: Optional[timedelta],
-        initial_hvac_mode: Optional[HVACMode],
-        away_temp: Optional[float],
-        precision: Optional[float],
-        unique_id: Optional[str],
-    ) -> None:
+    def __init__(self, hass: HomeAssistant, config: dict[str, Any], entry_id: str) -> None:
         """Initialize the thermostat."""
         self.hass = hass
-        self._name = name
-        self._heater_entity_id = heater_entity_id
-        self._sensor_entity_id = sensor_entity_id
-        self._humidity_sensor_entity_id = humidity_sensor_entity_id
-        self._main_thermostat_entity_id = main_thermostat_entity_id
-        self._ac_mode = ac_mode
-        self._min_temp = min_temp
-        self._max_temp = max_temp
-        self._cold_tolerance = cold_tolerance
-        self._hot_tolerance = hot_tolerance
-        self._keep_alive = keep_alive
-        self._initial_hvac_mode = initial_hvac_mode
-        self._away_temp = away_temp
-        self._precision = precision
-        self._attr_unique_id = unique_id
-
-        self._hvac_mode = initial_hvac_mode or HVACMode.OFF
-        self._target_temp = target_temp
-        self._current_temp = None
-        self._current_humidity = None
-        self._hvac_action = HVACAction.OFF
-        self._preset_mode = PRESET_NONE
+        self._entry_id = entry_id
+        self._attr_name = config[CONF_NAME]
+        self._attr_unique_id = f"{DOMAIN}_{entry_id}"
         
-        # Track main thermostat state
-        self._main_thermostat_hvac_action = HVACAction.OFF
+        # Configuration
+        self._temperature_sensor_entity_id = config[CONF_TEMPERATURE_SENSOR]
+        self._humidity_sensor_entity_id = config.get(CONF_HUMIDITY_SENSOR)
+        self._actuator_switch_entity_id = config[CONF_ACTUATOR_SWITCH]
+        self._main_thermostat_entity_id = config.get(CONF_MAIN_THERMOSTAT)
         
-        # Support for multiple HVAC modes
-        self._hvac_list = [HVACMode.OFF]
-        if ac_mode:
-            self._hvac_list.extend([HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO])
-        else:
-            self._hvac_list.append(HVACMode.HEAT)
-
+        self._cold_tolerance = config.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)
+        self._hot_tolerance = config.get(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE)
+        self._attr_min_temp = config.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
+        self._attr_max_temp = config.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
+        self._attr_target_temperature = config.get(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP)
+        
+        precision = config.get(CONF_PRECISION, DEFAULT_PRECISION)
+        self._attr_precision = precision
+        
+        # Set initial HVAC mode
+        self._attr_hvac_mode = config.get(CONF_INITIAL_HVAC_MODE, HVACMode.OFF)
+        
+        # State variables
+        self._attr_current_temperature = None
+        self._attr_current_humidity = None
+        self._attr_hvac_action = HVACAction.OFF
+        self._attr_temperature_unit = UnitOfTemperature.FAHRENHEIT
+        
+        # Supported features and modes
+        self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
+        if self._humidity_sensor_entity_id:
+            self._attr_supported_features |= ClimateEntityFeature.TARGET_HUMIDITY
+            
+        self._attr_hvac_modes = HVAC_MODES
+        
+        # Control variables
         self._active = False
         self._cur_temp = None
-        self._temp_precision = self._precision
-        self._enabled = True
+        self._cur_humidity = None
+        self._temp_lock = asyncio.Lock()
+        self._on_by_us = False
 
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added."""
@@ -179,19 +132,19 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         # Add listener for temperature sensor
         self.async_on_remove(
             async_track_state_change_event(
-                self.hass, [self._sensor_entity_id], self._async_sensor_changed
+                self.hass, [self._temperature_sensor_entity_id], self._async_sensor_changed
             )
         )
-
-        # Add listener for humidity sensor
+        
+        # Add listener for humidity sensor if configured
         if self._humidity_sensor_entity_id:
             self.async_on_remove(
                 async_track_state_change_event(
-                    self.hass, [self._humidity_sensor_entity_id], self._async_humidity_sensor_changed
+                    self.hass, [self._humidity_sensor_entity_id], self._async_sensor_changed
                 )
             )
-
-        # Add listener for main thermostat
+        
+        # Add listener for main thermostat if configured
         if self._main_thermostat_entity_id:
             self.async_on_remove(
                 async_track_state_change_event(
@@ -199,393 +152,273 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
                 )
             )
 
-        # Add listener for heater/cooler
+        # Add listener for actuator switch
         self.async_on_remove(
             async_track_state_change_event(
-                self.hass, [self._heater_entity_id], self._async_switch_changed
+                self.hass, [self._actuator_switch_entity_id], self._async_switch_changed
             )
         )
 
-        # Set up keep alive
-        if self._keep_alive:
-            self.async_on_remove(
-                async_track_time_interval(
-                    self.hass, self._async_keep_alive, self._keep_alive
-                )
-            )
-
-        @callback
-        def _async_startup(*_):
-            """Init on startup."""
-            self.hass.async_create_task(self._async_startup())
-
-        if self.hass.state == CoreState.running:
-            await self._async_startup()
-        else:
-            self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_START, _async_startup)
-
-        # Check if we have an old state
+        # Check if we have a saved state
         if (old_state := await self.async_get_last_state()) is not None:
             # If we have no initial temperature, restore
-            if self._target_temp is None:
+            if self._attr_target_temperature is None:
                 # If we have a previously saved temperature
                 if old_state.attributes.get(ATTR_TEMPERATURE) is None:
-                    if self._ac_mode:
-                        self._target_temp = self.max_temp
-                    else:
-                        self._target_temp = self.min_temp
+                    self._attr_target_temperature = self.min_temp
                     _LOGGER.warning(
                         "Undefined target temperature, falling back to %s",
-                        self._target_temp,
+                        self._attr_target_temperature,
                     )
                 else:
-                    self._target_temp = float(old_state.attributes[ATTR_TEMPERATURE])
-            if old_state.attributes.get(ATTR_PRESET_MODE):
-                self._preset_mode = old_state.attributes.get(ATTR_PRESET_MODE)
-            if not self._hvac_mode and old_state.state:
-                self._hvac_mode = old_state.state
+                    self._attr_target_temperature = float(old_state.attributes[ATTR_TEMPERATURE])
+
+            if old_state.state and old_state.state != STATE_UNKNOWN:
+                self._attr_hvac_mode = HVACMode(old_state.state)
 
         else:
-            # No previous state, try and restore defaults
-            if self._target_temp is None:
-                if self._ac_mode:
-                    self._target_temp = self.max_temp
-                else:
-                    self._target_temp = self.min_temp
-            _LOGGER.warning(
-                "No previously saved temperature, setting to %s", self._target_temp
+            # No previous state, set some defaults
+            if self._attr_target_temperature is None:
+                self._attr_target_temperature = self.min_temp
+            _LOGGER.warning("No previously saved temperature, setting to %s", self._attr_target_temperature)
+
+        # Set initial temperature and humidity
+        self._async_update_temp(None)
+        if self._humidity_sensor_entity_id:
+            self._async_update_humidity(None)
+        
+        # Set initial main thermostat state
+        if self._main_thermostat_entity_id:
+            self._async_update_main_thermostat_state(None)
+
+        # Call control logic on startup
+        if self.hass.state == "running":
+            await self._async_control_heating_cooling()
+        else:
+            self.hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_START, self._async_control_heating_cooling
             )
 
-    async def _async_startup(self):
-        """Run when entity is ready."""
-        sensor_state = self.hass.states.get(self._sensor_entity_id)
-        if sensor_state and sensor_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-            self._async_update_temp(sensor_state)
-            
-        # Update humidity if sensor available
-        if self._humidity_sensor_entity_id:
-            humidity_state = self.hass.states.get(self._humidity_sensor_entity_id)
-            if humidity_state and humidity_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-                self._async_update_humidity(humidity_state)
-                
-        # Update main thermostat state
-        if self._main_thermostat_entity_id:
-            main_thermostat_state = self.hass.states.get(self._main_thermostat_entity_id)
-            if main_thermostat_state:
-                self._async_update_main_thermostat(main_thermostat_state)
-
-        switch_state = self.hass.states.get(self._heater_entity_id)
-        if switch_state and switch_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-            self._async_update_hvac_action()
-
     @callback
-    def _async_sensor_changed(self, event):
-        """Handle temperature sensor changes."""
-        new_state = event.data.get("new_state")
-        if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+    def _async_update_temp(self, state) -> None:
+        """Update thermostat with latest state from temperature sensor."""
+        if state is None:
+            state = self.hass.states.get(self._temperature_sensor_entity_id)
+
+        if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             return
 
-        self._async_update_temp(new_state)
-        self.async_write_ha_state()
-        self.hass.async_create_task(self._async_control_heating())
-
-    @callback
-    def _async_humidity_sensor_changed(self, event):
-        """Handle humidity sensor changes."""
-        new_state = event.data.get("new_state")
-        if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-            return
-
-        self._async_update_humidity(new_state)
-        self.async_write_ha_state()
-
-    @callback
-    def _async_main_thermostat_changed(self, event):
-        """Handle main thermostat changes."""
-        new_state = event.data.get("new_state")
-        if new_state is None:
-            return
-
-        self._async_update_main_thermostat(new_state)
-        self.async_write_ha_state()
-
-    @callback
-    def _async_switch_changed(self, event):
-        """Handle heater switch changes."""
-        new_state = event.data.get("new_state")
-        if new_state is None:
-            return
-        self._async_update_hvac_action()
-        self.async_write_ha_state()
-
-    @callback
-    def _async_keep_alive(self, time):
-        """Call at keep alive interval."""
-        self.hass.async_create_task(self._async_control_heating())
-
-    @callback
-    def _async_update_temp(self, state):
-        """Update thermostat with latest state from sensor."""
         try:
             cur_temp = float(state.state)
-            if self._current_temp != cur_temp:
-                self._current_temp = cur_temp
+            self._cur_temp = cur_temp
+            self._attr_current_temperature = cur_temp
         except ValueError as ex:
-            _LOGGER.error("Unable to update from sensor: %s", ex)
+            _LOGGER.error("Unable to update from temperature sensor: %s", ex)
 
     @callback
-    def _async_update_humidity(self, state):
-        """Update thermostat with latest humidity from sensor."""
+    def _async_update_humidity(self, state) -> None:
+        """Update thermostat with latest state from humidity sensor."""
+        if state is None:
+            state = self.hass.states.get(self._humidity_sensor_entity_id)
+
+        if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+            return
+
         try:
             cur_humidity = float(state.state)
-            if self._current_humidity != cur_humidity:
-                self._current_humidity = cur_humidity
+            self._cur_humidity = cur_humidity
+            self._attr_current_humidity = cur_humidity
         except ValueError as ex:
-            _LOGGER.error("Unable to update humidity from sensor: %s", ex)
+            _LOGGER.error("Unable to update from humidity sensor: %s", ex)
 
     @callback
-    def _async_update_main_thermostat(self, state):
-        """Update HVAC action based on main thermostat."""
-        if hasattr(state, 'attributes') and 'hvac_action' in state.attributes:
-            main_action = state.attributes.get('hvac_action')
-            if main_action != self._main_thermostat_hvac_action:
-                self._main_thermostat_hvac_action = main_action
-                # Update our displayed hvac_action based on main thermostat
-                if self._main_thermostat_entity_id:
-                    self._hvac_action = main_action or HVACAction.OFF
+    def _async_update_main_thermostat_state(self, state) -> None:
+        """Update thermostat action based on main thermostat state."""
+        if state is None:
+            state = self.hass.states.get(self._main_thermostat_entity_id)
+
+        if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+            return
+
+        # Map main thermostat's hvac_action to our hvac_action
+        main_action = state.attributes.get("hvac_action", HVACAction.OFF)
+        
+        if main_action == HVACAction.HEATING:
+            self._attr_hvac_action = HVACAction.HEATING
+        elif main_action == HVACAction.COOLING:
+            self._attr_hvac_action = HVACAction.COOLING
+        elif main_action == HVACAction.IDLE:
+            self._attr_hvac_action = HVACAction.IDLE
+        else:
+            self._attr_hvac_action = HVACAction.OFF
 
     @callback
-    def _async_update_hvac_action(self):
-        """Update thermostat's HVAC action based on switch state."""
-        switch_state = self.hass.states.get(self._heater_entity_id)
-        if not switch_state:
+    def _async_sensor_changed(self, event) -> None:
+        """Handle temperature/humidity sensor state changes."""
+        new_state = event.data.get("new_state")
+        if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return
 
-        # If we have a main thermostat, use its action instead
-        if self._main_thermostat_entity_id:
+        entity_id = event.data.get("entity_id")
+        
+        if entity_id == self._temperature_sensor_entity_id:
+            self._async_update_temp(new_state)
+        elif entity_id == self._humidity_sensor_entity_id:
+            self._async_update_humidity(new_state)
+            
+        self.async_write_ha_state()
+        self.hass.async_create_task(self._async_control_heating_cooling())
+
+    @callback
+    def _async_main_thermostat_changed(self, event) -> None:
+        """Handle main thermostat state changes."""
+        new_state = event.data.get("new_state")
+        if new_state is None:
+            return
+            
+        self._async_update_main_thermostat_state(new_state)
+        self.async_write_ha_state()
+
+    @callback
+    def _async_switch_changed(self, event) -> None:
+        """Handle actuator switch state changes."""
+        new_state = event.data.get("new_state")
+        old_state = event.data.get("old_state")
+        if new_state is None:
             return
 
-        if self._hvac_mode == HVACMode.OFF:
-            self._hvac_action = HVACAction.OFF
-        elif switch_state.state == STATE_ON:
-            if self._hvac_mode == HVACMode.HEAT:
-                self._hvac_action = HVACAction.HEATING
-            elif self._hvac_mode == HVACMode.COOL:
-                self._hvac_action = HVACAction.COOLING
+        self.async_write_ha_state()
+        if not self._on_by_us:
+            # If the switch was turned on/off manually, we need to update our control logic
+            self.hass.async_create_task(self._async_control_heating_cooling())
+
+    async def _async_control_heating_cooling(self, time=None) -> None:
+        """Check if we need to turn heating/cooling on or off."""
+        async with self._temp_lock:
+            if not self._active and None not in (self._cur_temp, self._attr_target_temperature):
+                self._active = True
+                _LOGGER.info(
+                    "Obtained current and target temperature. "
+                    "Damper Thermostat active. %s, %s",
+                    self._cur_temp,
+                    self._attr_target_temperature,
+                )
+
+            if not self._active or self._attr_hvac_mode == HVACMode.OFF:
+                return
+
+            # If we don't have a main thermostat, we control based on our own logic
+            if not self._main_thermostat_entity_id:
+                await self._async_control_based_on_temperature()
             else:
-                self._hvac_action = HVACAction.HEATING  # Default
+                # If we have a main thermostat, we follow its state but still control our actuator
+                await self._async_control_based_on_main_thermostat()
+
+    async def _async_control_based_on_temperature(self) -> None:
+        """Control heating/cooling based on temperature difference."""
+        too_cold = self._attr_target_temperature >= self._cur_temp + self._cold_tolerance
+        too_hot = self._cur_temp >= self._attr_target_temperature + self._hot_tolerance
+        
+        if self._is_device_active:
+            if self._attr_hvac_mode == HVACMode.HEAT and not too_cold:
+                _LOGGER.info("Turning off heater %s", self._actuator_switch_entity_id)
+                await self._async_actuator_turn_off()
+            elif self._attr_hvac_mode == HVACMode.COOL and not too_hot:
+                _LOGGER.info("Turning off cooler %s", self._actuator_switch_entity_id)
+                await self._async_actuator_turn_off()
+            elif self._attr_hvac_mode == HVACMode.AUTO:
+                if not too_cold and not too_hot:
+                    _LOGGER.info("Turning off actuator %s", self._actuator_switch_entity_id)
+                    await self._async_actuator_turn_off()
         else:
-            self._hvac_action = HVACAction.IDLE
+            if self._attr_hvac_mode == HVACMode.HEAT and too_cold:
+                _LOGGER.info("Turning on heater %s", self._actuator_switch_entity_id)
+                await self._async_actuator_turn_on()
+            elif self._attr_hvac_mode == HVACMode.COOL and too_hot:
+                _LOGGER.info("Turning on cooler %s", self._actuator_switch_entity_id)
+                await self._async_actuator_turn_on()
+            elif self._attr_hvac_mode == HVACMode.AUTO:
+                if too_cold:
+                    _LOGGER.info("Turning on heater (auto) %s", self._actuator_switch_entity_id)
+                    await self._async_actuator_turn_on()
+                elif too_hot:
+                    _LOGGER.info("Turning on cooler (auto) %s", self._actuator_switch_entity_id)
+                    await self._async_actuator_turn_on()
 
-    async def _async_control_heating(self):
-        """Control the heating/cooling."""
-        if not self._active and None not in (self._current_temp, self._target_temp):
-            self._active = True
-            _LOGGER.info(
-                "Obtained current and target temperature. "
-                "Damper thermostat active. %s, %s",
-                self._current_temp,
-                self._target_temp,
-            )
-
-        if not self._active or self._hvac_mode == HVACMode.OFF:
+    async def _async_control_based_on_main_thermostat(self) -> None:
+        """Control actuator based on main thermostat state and our temperature."""
+        main_state = self.hass.states.get(self._main_thermostat_entity_id)
+        if main_state is None:
             return
-
-        # Get tolerance values
-        if self._preset_mode == PRESET_AWAY and self._away_temp:
-            target_temp = self._away_temp
-        else:
-            target_temp = self._target_temp
-
-        cold_tolerance = self._cold_tolerance
-        hot_tolerance = self._hot_tolerance
-
-        # Determine if we need heating or cooling
-        if self._hvac_mode == HVACMode.AUTO:
-            # Auto mode logic
-            if self._current_temp < target_temp - cold_tolerance:
-                # Need heating
-                await self._async_turn_on()
-            elif self._current_temp > target_temp + hot_tolerance:
-                # Need cooling (if in AC mode)
-                if self._ac_mode:
-                    await self._async_turn_on()
-                else:
-                    await self._async_turn_off()
-            else:
-                # In comfortable range
-                await self._async_turn_off()
-        elif self._hvac_mode == HVACMode.HEAT:
-            # Heat mode
-            if self._current_temp < target_temp - cold_tolerance:
-                await self._async_turn_on()
-            elif self._current_temp > target_temp + hot_tolerance:
-                await self._async_turn_off()
-        elif self._hvac_mode == HVACMode.COOL:
-            # Cool mode
-            if self._current_temp > target_temp + hot_tolerance:
-                await self._async_turn_on()
-            elif self._current_temp < target_temp - cold_tolerance:
-                await self._async_turn_off()
-
-    async def _async_turn_on(self):
-        """Turn heater/cooler on."""
-        data = {ATTR_ENTITY_ID: self._heater_entity_id}
-        await self.hass.services.async_call(HA_DOMAIN, SERVICE_TURN_ON, data)
-
-    async def _async_turn_off(self):
-        """Turn heater/cooler off."""
-        data = {ATTR_ENTITY_ID: self._heater_entity_id}
-        await self.hass.services.async_call(HA_DOMAIN, SERVICE_TURN_OFF, data)
+            
+        main_action = main_state.attributes.get("hvac_action", HVACAction.OFF)
+        
+        # Only activate our actuator if the main thermostat is actively heating/cooling
+        # and our temperature conditions warrant it
+        should_activate = False
+        
+        if main_action == HVACAction.HEATING and self._attr_hvac_mode in [HVACMode.HEAT, HVACMode.AUTO]:
+            too_cold = self._attr_target_temperature >= self._cur_temp + self._cold_tolerance
+            should_activate = too_cold
+        elif main_action == HVACAction.COOLING and self._attr_hvac_mode in [HVACMode.COOL, HVACMode.AUTO]:
+            too_hot = self._cur_temp >= self._attr_target_temperature + self._hot_tolerance
+            should_activate = too_hot
+            
+        if should_activate and not self._is_device_active:
+            _LOGGER.info("Main thermostat active, turning on actuator %s", self._actuator_switch_entity_id)
+            await self._async_actuator_turn_on()
+        elif not should_activate and self._is_device_active:
+            _LOGGER.info("Conditions not met, turning off actuator %s", self._actuator_switch_entity_id)
+            await self._async_actuator_turn_off()
 
     @property
-    def should_poll(self):
-        """Return the polling state."""
-        return False
+    def _is_device_active(self) -> bool:
+        """Check if the actuator switch is currently on."""
+        return self.hass.states.is_state(self._actuator_switch_entity_id, "on")
 
-    @property
-    def name(self):
-        """Return the name of the thermostat."""
-        return self._name
+    async def _async_actuator_turn_on(self) -> None:
+        """Turn actuator on."""
+        data = {"entity_id": self._actuator_switch_entity_id}
+        self._on_by_us = True
+        await self.hass.services.async_call("switch", SERVICE_TURN_ON, data)
 
-    @property
-    def precision(self):
-        """Return the precision of the system."""
-        if self._temp_precision is not None:
-            return self._temp_precision
-        return super().precision
+    async def _async_actuator_turn_off(self) -> None:
+        """Turn actuator off."""
+        data = {"entity_id": self._actuator_switch_entity_id}
+        self._on_by_us = True
+        await self.hass.services.async_call("switch", SERVICE_TURN_OFF, data)
 
-    @property
-    def target_temperature_step(self):
-        """Return the supported step of target temperature."""
-        return self.precision
-
-    @property
-    def temperature_unit(self):
-        """Return the unit of measurement."""
-        return self.hass.config.units.temperature_unit
-
-    @property
-    def current_temperature(self):
-        """Return the sensor temperature."""
-        return self._current_temp
-
-    @property
-    def current_humidity(self):
-        """Return the sensor humidity."""
-        return self._current_humidity
-
-    @property
-    def hvac_mode(self):
-        """Return current operation."""
-        return self._hvac_mode
-
-    @property
-    def hvac_action(self):
-        """Return the current HVAC action."""
-        return self._hvac_action
-
-    @property
-    def target_temperature(self):
-        """Return the temperature we try to reach."""
-        return self._target_temp
-
-    @property
-    def hvac_modes(self):
-        """List of available operation modes."""
-        return self._hvac_list
-
-    @property
-    def preset_mode(self):
-        """Return the current preset mode, e.g., home, away, temp."""
-        return self._preset_mode
-
-    @property
-    def preset_modes(self):
-        """Return a list of available preset modes."""
-        return [PRESET_NONE, PRESET_AWAY]
-
-    async def async_set_hvac_mode(self, hvac_mode):
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set hvac mode."""
         if hvac_mode == HVACMode.HEAT:
-            self._hvac_mode = HVACMode.HEAT
-            await self._async_control_heating()
+            self._attr_hvac_mode = HVACMode.HEAT
+            await self._async_control_heating_cooling()
         elif hvac_mode == HVACMode.COOL:
-            self._hvac_mode = HVACMode.COOL
-            await self._async_control_heating()
+            self._attr_hvac_mode = HVACMode.COOL
+            await self._async_control_heating_cooling()
         elif hvac_mode == HVACMode.AUTO:
-            self._hvac_mode = HVACMode.AUTO
-            await self._async_control_heating()
+            self._attr_hvac_mode = HVACMode.AUTO
+            await self._async_control_heating_cooling()
         elif hvac_mode == HVACMode.OFF:
-            self._hvac_mode = HVACMode.OFF
-            if self._active:
-                await self._async_turn_off()
+            self._attr_hvac_mode = HVACMode.OFF
+            if self._is_device_active:
+                await self._async_actuator_turn_off()
         else:
             _LOGGER.error("Unrecognized hvac mode: %s", hvac_mode)
             return
         # Ensure we update the display
-        self._async_update_hvac_action()
         self.async_write_ha_state()
 
-    async def async_set_temperature(self, **kwargs):
+    async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature."""
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
-        self._target_temp = temperature
-        await self._async_control_heating()
+        self._attr_target_temperature = temperature
+        await self._async_control_heating_cooling()
         self.async_write_ha_state()
 
     @property
-    def min_temp(self):
-        """Return the minimum temperature."""
-        if self._min_temp is not None:
-            return self._min_temp
-
-        # get default temp from super class
-        return super().min_temp
-
-    @property
-    def max_temp(self):
-        """Return the maximum temperature."""
-        if self._max_temp is not None:
-            return self._max_temp
-
-        # Get default temp from super class
-        return super().max_temp
-
-    async def async_set_preset_mode(self, preset_mode):
-        """Set new preset mode."""
-        if preset_mode == PRESET_AWAY and self._away_temp:
-            self._preset_mode = PRESET_AWAY
-        else:
-            self._preset_mode = PRESET_NONE
-
-        await self._async_control_heating()
-        self.async_write_ha_state()
-
-    @property
-    def supported_features(self):
-        """Return the list of supported features."""
-        return SUPPORT_FLAGS
-
-    @property
-    def extra_state_attributes(self):
-        """Return extra state attributes."""
-        attributes = {}
-        
-        if self._humidity_sensor_entity_id and self._current_humidity is not None:
-            attributes["current_humidity"] = self._current_humidity
-            
-        if self._main_thermostat_entity_id:
-            attributes["main_thermostat"] = self._main_thermostat_entity_id
-            attributes["main_thermostat_hvac_action"] = self._main_thermostat_hvac_action
-            
-        attributes.update({
-            "cold_tolerance": self._cold_tolerance,
-            "hot_tolerance": self._hot_tolerance,
-            "sensor_entity_id": self._sensor_entity_id,
-            "heater_entity_id": self._heater_entity_id,
-        })
-        
-        return attributes
+    def icon(self) -> str:
+        """Return the icon to use in the frontend."""
+        return "mdi:thermostat"

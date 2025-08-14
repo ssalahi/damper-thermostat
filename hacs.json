@@ -4,5 +4,6 @@
   "filename": "damper_thermostat.zip",
   "render_readme": true,
   "domains": ["climate"],
-  "homeassistant": "2023.1.0"
+  "homeassistant": "2023.1.0",
+  "image": "https://raw.githubusercontent.com/ssalahi/damper-thermostat/main/images/icon.png"
 }

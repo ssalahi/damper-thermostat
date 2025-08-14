@@ -255,6 +255,8 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             self._attr_hvac_action = HVACAction.HEATING
         elif main_action == HVACAction.COOLING:
             self._attr_hvac_action = HVACAction.COOLING
+        elif main_action == HVACAction.FAN:
+            self._attr_hvac_action = HVACAction.FAN
         elif main_action == HVACAction.IDLE:
             self._attr_hvac_action = HVACAction.IDLE
         else:
@@ -445,6 +447,8 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             return "mdi:radiator"
         elif self._attr_hvac_mode == HVACMode.COOL:
             return "mdi:air-conditioner"
+        elif self._attr_hvac_mode == HVACMode.FAN_ONLY:
+            return "mdi:fan-auto"
         else:
             return "mdi:thermostat"
 

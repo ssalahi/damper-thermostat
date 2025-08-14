@@ -51,14 +51,24 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_MAIN_THERMOSTAT): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="climate")
         ),
-        vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): vol.Coerce(float),
-        vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): vol.Coerce(float),
-        vol.Optional(CONF_MIN_TEMP, default=DEFAULT_MIN_TEMP): vol.Coerce(float),
-        vol.Optional(CONF_MAX_TEMP, default=DEFAULT_MAX_TEMP): vol.Coerce(float),
-        vol.Optional(CONF_TARGET_TEMP, default=DEFAULT_TARGET_TEMP): vol.Coerce(float),
+        vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): vol.All(
+            vol.Coerce(float), vol.Range(min=0.1, max=10.0)
+        ),
+        vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): vol.All(
+            vol.Coerce(float), vol.Range(min=0.1, max=10.0)
+        ),
+        vol.Optional(CONF_MIN_TEMP, default=DEFAULT_MIN_TEMP): vol.All(
+            vol.Coerce(float), vol.Range(min=-40, max=70)
+        ),
+        vol.Optional(CONF_MAX_TEMP, default=DEFAULT_MAX_TEMP): vol.All(
+            vol.Coerce(float), vol.Range(min=70, max=100)
+        ),
+        vol.Optional(CONF_TARGET_TEMP, default=DEFAULT_TARGET_TEMP): vol.All(
+            vol.Coerce(float), vol.Range(min=-40, max=80)
+        ),
         vol.Optional(CONF_PRECISION, default=DEFAULT_PRECISION): vol.In([0.1, 0.5, 1.0]),
-        vol.Optional(CONF_INITIAL_HVAC_MODE, default=HVACMode.OFF): vol.In(
-            [HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.OFF]
+        vol.Optional(CONF_INITIAL_HVAC_MODE, default=HVACMode.AUTO): vol.In(
+            [HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.HEAT_COOL, HVACMode.OFF]
         ),
     }
 )
@@ -203,30 +213,30 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_COLD_TOLERANCE, 
                     default=get_current_value(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)
-                ): vol.Coerce(float),
+                ): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=10.0)),
                 vol.Optional(
                     CONF_HOT_TOLERANCE, 
                     default=get_current_value(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE)
-                ): vol.Coerce(float),
+                ): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=10.0)),
                 vol.Optional(
                     CONF_MIN_TEMP, 
                     default=get_current_value(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
-                ): vol.Coerce(float),
+                ): vol.All(vol.Coerce(float), vol.Range(min=-40, max=70)),
                 vol.Optional(
                     CONF_MAX_TEMP, 
                     default=get_current_value(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
-                ): vol.Coerce(float),
+                ): vol.All(vol.Coerce(float), vol.Range(min=70, max=100)),
                 vol.Optional(
                     CONF_TARGET_TEMP, 
                     default=get_current_value(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP)
-                ): vol.Coerce(float),
+                ): vol.All(vol.Coerce(float), vol.Range(min=-60, max=80)),
                 vol.Optional(
                     CONF_PRECISION, 
                     default=get_current_value(CONF_PRECISION, DEFAULT_PRECISION)
                 ): vol.In([0.1, 0.5, 1.0]),
                 vol.Optional(
                     CONF_INITIAL_HVAC_MODE, 
-                    default=get_current_value(CONF_INITIAL_HVAC_MODE, HVACMode.OFF)
-                ): vol.In([HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.OFF]),
+                    default=get_current_value(CONF_INITIAL_HVAC_MODE, HVACMode.AUTO)
+                ): vol.In([HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.HEAT_COOL, HVACMode.OFF]),
             }
         )

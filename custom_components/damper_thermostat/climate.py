@@ -448,3 +448,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         else:
             return "mdi:thermostat"
 
+    @property
+    def device_class(self):
+        """Return the device class of this entity."""
+        return "thermostat"

@@ -425,8 +425,26 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._attr_target_temperature = temperature
         await self._async_control_heating_cooling()
         self.async_write_ha_state()
-
+    
     @property
-    def icon(self) -> str:
-        """Return the icon to use in the frontend."""
-        return "mdi:thermostat"
+    def icon(self):
+        """Return the icon based on current HVAC state."""
+        # Dynamic icons based on mode and action
+        if self._attr_hvac_mode == HVACMode.OFF:
+            return "mdi:thermostat-off"
+        elif self._attr_hvac_action == HVACAction.HEATING:
+            return "mdi:fire"
+        elif self._attr_hvac_action == HVACAction.COOLING:
+            return "mdi:snowflake"
+        elif self._attr_hvac_mode == HVACMode.AUTO:
+            if self._attr_hvac_action == HVACAction.IDLE:
+                return "mdi:thermostat-auto"
+            else:
+                return "mdi:thermostat-auto"
+        elif self._attr_hvac_mode == HVACMode.HEAT:
+            return "mdi:radiator"
+        elif self._attr_hvac_mode == HVACMode.COOL:
+            return "mdi:air-conditioner"
+        else:
+            return "mdi:thermostat"
+

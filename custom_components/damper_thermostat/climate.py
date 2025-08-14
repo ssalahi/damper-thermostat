@@ -32,6 +32,7 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util.unit_conversion import TemperatureConverter
 import homeassistant.util.dt as dt_util
 
@@ -451,6 +452,17 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             return "mdi:fan-auto"
         else:
             return "mdi:thermostat"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information about this thermostat."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry_id)},
+            name=self._attr_name,
+            manufacturer="Damper Thermostat",
+            model="Smart Damper Controller",
+            sw_version="1.0.0",
+        )
 
     @property
     def device_class(self):

@@ -36,7 +36,6 @@ SUPPORT_FLAGS = (
 HVAC_MODES = [
     HVACMode.HEAT,
     HVACMode.COOL,
-    HVACMode.HEAT_COOL,
     HVACMode.AUTO,
     HVACMode.OFF,
 ]

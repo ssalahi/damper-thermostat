@@ -409,9 +409,6 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         elif hvac_mode == HVACMode.AUTO:
             self._attr_hvac_mode = HVACMode.AUTO
             await self._async_control_heating_cooling()
-        elif hvac_mode == HVACMode.HEAT_COOL:
-            self._attr_hvac_mode = HVACMode.HEAT_COOL
-            await self._async_control_heating_cooling()
         elif hvac_mode == HVACMode.OFF:
             self._attr_hvac_mode = HVACMode.OFF
             if self._is_device_active:

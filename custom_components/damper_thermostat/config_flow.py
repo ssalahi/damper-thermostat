@@ -36,7 +36,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 def _get_config_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
-    """Get the config schema for immutable setup data."""
+    """Get the config schema for setup and reconfigure (all options)."""
     if defaults is None:
         defaults = {}
     
@@ -93,14 +93,8 @@ def _get_config_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             selector.EntitySelectorConfig(domain="climate")
         )
     
-    return vol.Schema(schema_dict)
-
-def _get_options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
-    """Get the options schema for mutable runtime options."""
-    if defaults is None:
-        defaults = {}
-    
-    return vol.Schema({
+    # Add all the configuration options to setup/reconfigure
+    schema_dict.update({
         vol.Optional(
             CONF_COLD_TOLERANCE, 
             default=defaults.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)
@@ -126,9 +120,69 @@ def _get_options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             default=defaults.get(CONF_INITIAL_HVAC_MODE, HVACMode.AUTO)
         ): vol.In([HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.OFF]),
     })
+    
+    return vol.Schema(schema_dict)
+
+def _get_options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    """Get the options schema for device editing."""
+    if defaults is None:
+        defaults = {}
+    
+    schema_dict = {}
+    
+    # Temperature sensor field
+    temp_sensor_default = defaults.get(CONF_TEMPERATURE_SENSOR)
+    if temp_sensor_default and (isinstance(temp_sensor_default, list) and len(temp_sensor_default) > 0):
+        schema_dict[vol.Required(CONF_TEMPERATURE_SENSOR, default=temp_sensor_default)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor", device_class="temperature", multiple=True)
+        )
+    else:
+        schema_dict[vol.Required(CONF_TEMPERATURE_SENSOR)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor", device_class="temperature", multiple=True)
+        )
+    
+    # Humidity sensor field (optional)
+    humidity_sensor_default = defaults.get(CONF_HUMIDITY_SENSOR)
+    if humidity_sensor_default:
+        schema_dict[vol.Optional(CONF_HUMIDITY_SENSOR, default=humidity_sensor_default)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+        )
+    else:
+        schema_dict[vol.Optional(CONF_HUMIDITY_SENSOR)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+        )
+    
+    # Main thermostat field (optional)
+    main_thermostat_default = defaults.get(CONF_MAIN_THERMOSTAT)
+    if main_thermostat_default:
+        schema_dict[vol.Optional(CONF_MAIN_THERMOSTAT, default=main_thermostat_default)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="climate")
+        )
+    else:
+        schema_dict[vol.Optional(CONF_MAIN_THERMOSTAT)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="climate")
+        )
+    
+    # Add the frequently adjusted options
+    schema_dict.update({
+        vol.Optional(
+            CONF_COLD_TOLERANCE, 
+            default=defaults.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)
+        ): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=10.0)),
+        vol.Optional(
+            CONF_HOT_TOLERANCE, 
+            default=defaults.get(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE)
+        ): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=10.0)),
+        vol.Optional(
+            CONF_TARGET_TEMP, 
+            default=defaults.get(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP)
+        ): vol.All(vol.Coerce(float), vol.Range(min=-40, max=80)),
+    })
+    
+    return vol.Schema(schema_dict)
 
 def _get_user_schema() -> vol.Schema:
-    """Get the user schema for initial setup."""
+    """Get the user schema for initial setup (all options)."""
     return _get_config_schema()
 
 
@@ -205,7 +259,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         reconfigure_entry = self._get_reconfigure_entry()
         current_data = reconfigure_entry.data or {}
         
-        # Add the entry title as the default name
+        # Add the entry title as the default name and include all current data
         defaults = {**current_data, CONF_NAME: current_data.get(CONF_NAME, reconfigure_entry.title)}
         
         return self.async_show_form(
@@ -345,14 +399,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 except (AttributeError, TypeError, KeyError):
                     return default
             
-            # Build defaults dictionary with safe access (only mutable options)
+            # Build defaults dictionary with safe access (sensors and frequently adjusted options)
             defaults = {
+                CONF_TEMPERATURE_SENSOR: get_current_value(CONF_TEMPERATURE_SENSOR, []),
+                CONF_HUMIDITY_SENSOR: get_current_value(CONF_HUMIDITY_SENSOR, None),
+                CONF_MAIN_THERMOSTAT: get_current_value(CONF_MAIN_THERMOSTAT, None),
                 CONF_COLD_TOLERANCE: get_current_value(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE),
                 CONF_HOT_TOLERANCE: get_current_value(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE),
-                CONF_MIN_TEMP: get_current_value(CONF_MIN_TEMP, DEFAULT_MIN_TEMP),
-                CONF_MAX_TEMP: get_current_value(CONF_MAX_TEMP, DEFAULT_MAX_TEMP),
                 CONF_TARGET_TEMP: get_current_value(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP),
-                CONF_INITIAL_HVAC_MODE: get_current_value(CONF_INITIAL_HVAC_MODE, HVACMode.AUTO),
             }
             
             return _get_options_schema(defaults)
@@ -363,10 +417,34 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             return _get_options_schema()
 
     async def _validate_options_data(self, user_input: dict[str, Any]) -> dict[str, str]:
-        """Validate options data (no entity validation needed for options)."""
+        """Validate options data including entities."""
         errors: dict[str, str] = {}
         
-        # Options flow only handles numeric values and modes, no entity validation needed
-        # All validation is handled by the schema constraints
+        # Validate temperature sensors (can be single entity or list of entities)
+        temp_sensors = user_input.get(CONF_TEMPERATURE_SENSOR)
+        if not temp_sensors:
+            errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
+        elif isinstance(temp_sensors, str):
+            # Single sensor
+            if not self.hass.states.get(temp_sensors):
+                errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
+        elif isinstance(temp_sensors, list):
+            # Multiple sensors
+            for sensor in temp_sensors:
+                if not self.hass.states.get(sensor):
+                    errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
+                    break
+        else:
+            errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
+        
+        # Validate humidity sensor
+        humidity_sensor = user_input.get(CONF_HUMIDITY_SENSOR)
+        if humidity_sensor and not self.hass.states.get(humidity_sensor):
+            errors[CONF_HUMIDITY_SENSOR] = "entity_not_found"
+                
+        # Validate main thermostat
+        main_thermostat = user_input.get(CONF_MAIN_THERMOSTAT)
+        if main_thermostat and not self.hass.states.get(main_thermostat):
+            errors[CONF_MAIN_THERMOSTAT] = "entity_not_found"
         
         return errors

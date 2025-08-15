@@ -49,22 +49,22 @@
     "step": {
       "init": {
         "title": "Damper Thermostat Options",
-        "description": "Update runtime options for {name}",
+        "description": "Edit device settings for {name}",
         "data": {
+          "temperature_sensor": "Temperature Sensor",
+          "humidity_sensor": "Humidity Sensor (Optional)",
+          "main_thermostat": "Main Thermostat (Optional)",
           "cold_tolerance": "Cold Tolerance",
           "hot_tolerance": "Hot Tolerance",
-          "min_temp": "Minimum Temperature",
-          "max_temp": "Maximum Temperature",
-          "target_temp": "Target Temperature",
-          "initial_hvac_mode": "HVAC Mode"
+          "target_temp": "Target Temperature"
         },
         "data_description": {
+          "temperature_sensor": "Sensors to monitor for temperature readings",
+          "humidity_sensor": "Optional sensor to monitor humidity",
+          "main_thermostat": "Optional main thermostat to follow",
           "cold_tolerance": "Temperature difference below target before heating activates",
           "hot_tolerance": "Temperature difference above target before cooling activates",
-          "min_temp": "Minimum allowed temperature setting",
-          "max_temp": "Maximum allowed temperature setting",
-          "target_temp": "Default target temperature",
-          "initial_hvac_mode": "Default HVAC mode when integration starts"
+          "target_temp": "Default target temperature"
         }
       }
     }

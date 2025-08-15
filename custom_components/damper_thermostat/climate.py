@@ -283,7 +283,9 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             self._async_update_humidity(new_state)
             
         self.async_write_ha_state()
-        self.hass.async_create_task(self._async_control_heating_cooling())
+        # Use async_create_task with proper error handling
+        task = self.hass.async_create_task(self._async_control_heating_cooling())
+        task.add_done_callback(self._handle_control_task_done)
 
     @callback
     def _async_main_thermostat_changed(self, event) -> None:
@@ -306,103 +308,131 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self.async_write_ha_state()
         if not self._on_by_us:
             # If the switch was turned on/off manually, we need to update our control logic
-            self.hass.async_create_task(self._async_control_heating_cooling())
+            task = self.hass.async_create_task(self._async_control_heating_cooling())
+            task.add_done_callback(self._handle_control_task_done)
+        
+        # Reset the flag after processing
+        self._on_by_us = False
 
     async def _async_control_heating_cooling(self, time=None) -> None:
         """Check if we need to turn heating/cooling on or off."""
-        async with self._temp_lock:
-            if not self._active and None not in (self._cur_temp, self._attr_target_temperature):
-                self._active = True
-                _LOGGER.info(
-                    "Obtained current and target temperature. "
-                    "Damper Thermostat active. %s, %s",
-                    self._cur_temp,
-                    self._attr_target_temperature,
-                )
+        try:
+            async with self._temp_lock:
+                if not self._active and None not in (self._cur_temp, self._attr_target_temperature):
+                    self._active = True
+                    _LOGGER.info(
+                        "Obtained current and target temperature. "
+                        "Damper Thermostat active. %s, %s",
+                        self._cur_temp,
+                        self._attr_target_temperature,
+                    )
 
-            if not self._active or self._attr_hvac_mode == HVACMode.OFF:
-                return
+                if not self._active or self._attr_hvac_mode == HVACMode.OFF:
+                    return
 
-            # If we don't have a main thermostat, we control based on our own logic
-            if not self._main_thermostat_entity_id:
-                await self._async_control_based_on_temperature()
-            else:
-                # If we have a main thermostat, we follow its state but still control our actuator
-                await self._async_control_based_on_main_thermostat()
+                # If we don't have a main thermostat, we control based on our own logic
+                if not self._main_thermostat_entity_id:
+                    await self._async_control_based_on_temperature()
+                else:
+                    # If we have a main thermostat, we follow its state but still control our actuator
+                    await self._async_control_based_on_main_thermostat()
+        except Exception as ex:
+            _LOGGER.error("Error in control heating/cooling: %s", ex)
 
     async def _async_control_based_on_temperature(self) -> None:
         """Control heating/cooling based on temperature difference."""
-        too_cold = self._attr_target_temperature >= self._cur_temp + self._cold_tolerance
-        too_hot = self._cur_temp >= self._attr_target_temperature + self._hot_tolerance
-        
-        if self._is_device_active:
-            if self._attr_hvac_mode == HVACMode.HEAT and not too_cold:
-                _LOGGER.info("Turning off heater %s", self._actuator_switch_entity_id)
-                await self._async_actuator_turn_off()
-            elif self._attr_hvac_mode == HVACMode.COOL and not too_hot:
-                _LOGGER.info("Turning off cooler %s", self._actuator_switch_entity_id)
-                await self._async_actuator_turn_off()
-            elif self._attr_hvac_mode == HVACMode.AUTO:
-                if not too_cold and not too_hot:
-                    _LOGGER.info("Turning off actuator %s", self._actuator_switch_entity_id)
+        try:
+            too_cold = self._attr_target_temperature >= self._cur_temp + self._cold_tolerance
+            too_hot = self._cur_temp >= self._attr_target_temperature + self._hot_tolerance
+            
+            current_device_active = await self._async_is_device_active()
+            if current_device_active:
+                if self._attr_hvac_mode == HVACMode.HEAT and not too_cold:
+                    _LOGGER.info("Turning off heater %s", self._actuator_switch_entity_id)
                     await self._async_actuator_turn_off()
-        else:
-            if self._attr_hvac_mode == HVACMode.HEAT and too_cold:
-                _LOGGER.info("Turning on heater %s", self._actuator_switch_entity_id)
-                await self._async_actuator_turn_on()
-            elif self._attr_hvac_mode == HVACMode.COOL and too_hot:
-                _LOGGER.info("Turning on cooler %s", self._actuator_switch_entity_id)
-                await self._async_actuator_turn_on()
-            elif self._attr_hvac_mode == HVACMode.AUTO:
-                if too_cold:
-                    _LOGGER.info("Turning on heater (auto) %s", self._actuator_switch_entity_id)
+                elif self._attr_hvac_mode == HVACMode.COOL and not too_hot:
+                    _LOGGER.info("Turning off cooler %s", self._actuator_switch_entity_id)
+                    await self._async_actuator_turn_off()
+                elif self._attr_hvac_mode == HVACMode.AUTO:
+                    if not too_cold and not too_hot:
+                        _LOGGER.info("Turning off actuator %s", self._actuator_switch_entity_id)
+                        await self._async_actuator_turn_off()
+            else:
+                if self._attr_hvac_mode == HVACMode.HEAT and too_cold:
+                    _LOGGER.info("Turning on heater %s", self._actuator_switch_entity_id)
                     await self._async_actuator_turn_on()
-                elif too_hot:
-                    _LOGGER.info("Turning on cooler (auto) %s", self._actuator_switch_entity_id)
+                elif self._attr_hvac_mode == HVACMode.COOL and too_hot:
+                    _LOGGER.info("Turning on cooler %s", self._actuator_switch_entity_id)
                     await self._async_actuator_turn_on()
+                elif self._attr_hvac_mode == HVACMode.AUTO:
+                    if too_cold:
+                        _LOGGER.info("Turning on heater (auto) %s", self._actuator_switch_entity_id)
+                        await self._async_actuator_turn_on()
+                    elif too_hot:
+                        _LOGGER.info("Turning on cooler (auto) %s", self._actuator_switch_entity_id)
+                        await self._async_actuator_turn_on()
+        except Exception as ex:
+            _LOGGER.error("Error in temperature-based control: %s", ex)
 
     async def _async_control_based_on_main_thermostat(self) -> None:
         """Control actuator based on main thermostat state and our temperature."""
-        main_state = self.hass.states.get(self._main_thermostat_entity_id)
-        if main_state is None:
-            return
+        try:
+            main_state = self.hass.states.get(self._main_thermostat_entity_id)
+            if main_state is None:
+                _LOGGER.warning("Main thermostat %s not found", self._main_thermostat_entity_id)
+                return
+                
+            main_action = main_state.attributes.get("hvac_action", HVACAction.OFF)
             
-        main_action = main_state.attributes.get("hvac_action", HVACAction.OFF)
-        
-        # Only activate our actuator if the main thermostat is actively heating/cooling
-        # and our temperature conditions warrant it
-        should_activate = False
-        
-        if main_action == HVACAction.HEATING and self._attr_hvac_mode in [HVACMode.HEAT, HVACMode.AUTO]:
-            too_cold = self._attr_target_temperature >= self._cur_temp + self._cold_tolerance
-            should_activate = too_cold
-        elif main_action == HVACAction.COOLING and self._attr_hvac_mode in [HVACMode.COOL, HVACMode.AUTO]:
-            too_hot = self._cur_temp >= self._attr_target_temperature + self._hot_tolerance
-            should_activate = too_hot
+            # Only activate our actuator if the main thermostat is actively heating/cooling
+            # and our temperature conditions warrant it
+            should_activate = False
             
-        if should_activate and not self._is_device_active:
-            _LOGGER.info("Main thermostat active, turning on actuator %s", self._actuator_switch_entity_id)
-            await self._async_actuator_turn_on()
-        elif not should_activate and self._is_device_active:
-            _LOGGER.info("Conditions not met, turning off actuator %s", self._actuator_switch_entity_id)
-            await self._async_actuator_turn_off()
+            if main_action == HVACAction.HEATING and self._attr_hvac_mode in [HVACMode.HEAT, HVACMode.AUTO]:
+                too_cold = self._attr_target_temperature >= self._cur_temp + self._cold_tolerance
+                should_activate = too_cold
+            elif main_action == HVACAction.COOLING and self._attr_hvac_mode in [HVACMode.COOL, HVACMode.AUTO]:
+                too_hot = self._cur_temp >= self._attr_target_temperature + self._hot_tolerance
+                should_activate = too_hot
+                
+            current_device_active = await self._async_is_device_active()
+            if should_activate and not current_device_active:
+                _LOGGER.info("Main thermostat active, turning on actuator %s", self._actuator_switch_entity_id)
+                await self._async_actuator_turn_on()
+            elif not should_activate and current_device_active:
+                _LOGGER.info("Conditions not met, turning off actuator %s", self._actuator_switch_entity_id)
+                await self._async_actuator_turn_off()
+        except Exception as ex:
+            _LOGGER.error("Error in main thermostat control: %s", ex)
 
-    @property
-    def _is_device_active(self) -> bool:
+    async def _async_is_device_active(self) -> bool:
         """Check if the actuator switch is currently on."""
-        return self.hass.states.is_state(self._actuator_switch_entity_id, "on")
+        try:
+            state = self.hass.states.get(self._actuator_switch_entity_id)
+            return state is not None and state.state == "on"
+        except Exception as ex:
+            _LOGGER.error("Error checking device state: %s", ex)
+            return False
 
     async def _async_actuator_turn_on(self) -> None:
         """Turn actuator on."""
-        data = {"entity_id": self._actuator_switch_entity_id}
-        self._on_by_us = True
-        await self.hass.services.async_call("switch", SERVICE_TURN_ON, data)
+        try:
+            data = {"entity_id": self._actuator_switch_entity_id}
+            self._on_by_us = True
+            await self.hass.services.async_call("switch", SERVICE_TURN_ON, data, blocking=False)
+        except Exception as ex:
+            _LOGGER.error("Error turning on actuator %s: %s", self._actuator_switch_entity_id, ex)
+            self._on_by_us = False
 
     async def _async_actuator_turn_off(self) -> None:
         """Turn actuator off."""
-        data = {"entity_id": self._actuator_switch_entity_id}
-        self._on_by_us = True
-        await self.hass.services.async_call("switch", SERVICE_TURN_OFF, data)
+        try:
+            data = {"entity_id": self._actuator_switch_entity_id}
+            self._on_by_us = True
+            await self.hass.services.async_call("switch", SERVICE_TURN_OFF, data, blocking=False)
+        except Exception as ex:
+            _LOGGER.error("Error turning off actuator %s: %s", self._actuator_switch_entity_id, ex)
+            self._on_by_us = False
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set hvac mode."""
@@ -417,7 +447,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             await self._async_control_heating_cooling()
         elif hvac_mode == HVACMode.OFF:
             self._attr_hvac_mode = HVACMode.OFF
-            if self._is_device_active:
+            if await self._async_is_device_active():
                 await self._async_actuator_turn_off()
         else:
             _LOGGER.error("Unrecognized hvac mode: %s", hvac_mode)
@@ -433,6 +463,12 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._attr_target_temperature = temperature
         await self._async_control_heating_cooling()
         self.async_write_ha_state()
+
+    @callback
+    def _handle_control_task_done(self, task) -> None:
+        """Handle completion of control task."""
+        if task.exception():
+            _LOGGER.error("Control task failed: %s", task.exception())
     
     @property
     def icon(self):

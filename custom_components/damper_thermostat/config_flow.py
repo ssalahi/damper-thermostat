@@ -40,66 +40,97 @@ def _get_schema_with_defaults(defaults: dict[str, Any] | None = None) -> vol.Sch
     if defaults is None:
         defaults = {}
     
-    return vol.Schema(
-        {
-            vol.Required(
-                CONF_NAME, 
-                default=defaults.get(CONF_NAME, "")
-            ): cv.string,
-            vol.Required(
-                CONF_TEMPERATURE_SENSOR,
-                default=defaults.get(CONF_TEMPERATURE_SENSOR, [])
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(
-                    domain="sensor", 
-                    device_class="temperature",
-                    multiple=True
-                )
-            ),
-            vol.Optional(
-                CONF_HUMIDITY_SENSOR,
-                default=defaults.get(CONF_HUMIDITY_SENSOR)
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
-            ),
-            vol.Required(
-                CONF_ACTUATOR_SWITCH,
-                default=defaults.get(CONF_ACTUATOR_SWITCH, "")
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="switch")
-            ),
-            vol.Optional(
-                CONF_MAIN_THERMOSTAT,
-                default=defaults.get(CONF_MAIN_THERMOSTAT)
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="climate")
-            ),
-            vol.Optional(
-                CONF_COLD_TOLERANCE, 
-                default=defaults.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)
-            ): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=10.0)),
-            vol.Optional(
-                CONF_HOT_TOLERANCE, 
-                default=defaults.get(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE)
-            ): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=10.0)),
-            vol.Optional(
-                CONF_MIN_TEMP, 
-                default=defaults.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
-            ): vol.All(vol.Coerce(float), vol.Range(min=-40, max=70)),
-            vol.Optional(
-                CONF_MAX_TEMP, 
-                default=defaults.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
-            ): vol.All(vol.Coerce(float), vol.Range(min=70, max=100)),
-            vol.Optional(
-                CONF_TARGET_TEMP, 
-                default=defaults.get(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP)
-            ): vol.All(vol.Coerce(float), vol.Range(min=-40, max=80)),
-            vol.Optional(
-                CONF_INITIAL_HVAC_MODE, 
-                default=defaults.get(CONF_INITIAL_HVAC_MODE, HVACMode.AUTO)
-            ): vol.In([HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.OFF]),
-        }
-    )
+    # Helper function to get default value, filtering out empty values
+    def get_default(key: str, fallback: Any) -> Any:
+        value = defaults.get(key, fallback)
+        # Don't use empty strings or empty lists as defaults for entity selectors
+        if key in [CONF_TEMPERATURE_SENSOR, CONF_HUMIDITY_SENSOR, CONF_ACTUATOR_SWITCH, CONF_MAIN_THERMOSTAT]:
+            if not value or (isinstance(value, list) and len(value) == 0):
+                return vol.UNDEFINED
+        return value
+    
+    schema_dict = {}
+    
+    # Name field
+    name_default = defaults.get(CONF_NAME)
+    if name_default:
+        schema_dict[vol.Required(CONF_NAME, default=name_default)] = cv.string
+    else:
+        schema_dict[vol.Required(CONF_NAME)] = cv.string
+    
+    # Temperature sensor field
+    temp_sensor_default = defaults.get(CONF_TEMPERATURE_SENSOR)
+    if temp_sensor_default and (isinstance(temp_sensor_default, list) and len(temp_sensor_default) > 0):
+        schema_dict[vol.Required(CONF_TEMPERATURE_SENSOR, default=temp_sensor_default)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor", device_class="temperature", multiple=True)
+        )
+    else:
+        schema_dict[vol.Required(CONF_TEMPERATURE_SENSOR)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor", device_class="temperature", multiple=True)
+        )
+    
+    # Humidity sensor field (optional)
+    humidity_sensor_default = defaults.get(CONF_HUMIDITY_SENSOR)
+    if humidity_sensor_default:
+        schema_dict[vol.Optional(CONF_HUMIDITY_SENSOR, default=humidity_sensor_default)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+        )
+    else:
+        schema_dict[vol.Optional(CONF_HUMIDITY_SENSOR)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+        )
+    
+    # Actuator switch field
+    actuator_switch_default = defaults.get(CONF_ACTUATOR_SWITCH)
+    if actuator_switch_default:
+        schema_dict[vol.Required(CONF_ACTUATOR_SWITCH, default=actuator_switch_default)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="switch")
+        )
+    else:
+        schema_dict[vol.Required(CONF_ACTUATOR_SWITCH)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="switch")
+        )
+    
+    # Main thermostat field (optional)
+    main_thermostat_default = defaults.get(CONF_MAIN_THERMOSTAT)
+    if main_thermostat_default:
+        schema_dict[vol.Optional(CONF_MAIN_THERMOSTAT, default=main_thermostat_default)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="climate")
+        )
+    else:
+        schema_dict[vol.Optional(CONF_MAIN_THERMOSTAT)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="climate")
+        )
+    
+    # Numeric fields with defaults
+    schema_dict.update({
+        vol.Optional(
+            CONF_COLD_TOLERANCE, 
+            default=defaults.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)
+        ): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=10.0)),
+        vol.Optional(
+            CONF_HOT_TOLERANCE, 
+            default=defaults.get(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE)
+        ): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=10.0)),
+        vol.Optional(
+            CONF_MIN_TEMP, 
+            default=defaults.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
+        ): vol.All(vol.Coerce(float), vol.Range(min=-40, max=70)),
+        vol.Optional(
+            CONF_MAX_TEMP, 
+            default=defaults.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
+        ): vol.All(vol.Coerce(float), vol.Range(min=70, max=100)),
+        vol.Optional(
+            CONF_TARGET_TEMP, 
+            default=defaults.get(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP)
+        ): vol.All(vol.Coerce(float), vol.Range(min=-40, max=80)),
+        vol.Optional(
+            CONF_INITIAL_HVAC_MODE, 
+            default=defaults.get(CONF_INITIAL_HVAC_MODE, HVACMode.AUTO)
+        ): vol.In([HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.OFF]),
+    })
+    
+    return vol.Schema(schema_dict)
 
 def _get_user_schema() -> vol.Schema:
     """Get the user schema with default values."""

@@ -15,7 +15,6 @@
           "min_temp": "Minimum Temperature",
           "max_temp": "Maximum Temperature",
           "target_temp": "Initial Target Temperature",
-          "precision": "Temperature Precision",
           "initial_hvac_mode": "Initial HVAC Mode"
         }
       }
@@ -40,7 +39,6 @@
           "min_temp": "Minimum Temperature",
           "max_temp": "Maximum Temperature",
           "target_temp": "Target Temperature",
-          "precision": "Temperature Precision",
           "initial_hvac_mode": "HVAC Mode"
         }
       }

@@ -18,7 +18,6 @@ CONF_HOT_TOLERANCE_AUTO = "hot_tolerance_auto"
 CONF_MIN_TEMP = "min_temp"
 CONF_MAX_TEMP = "max_temp"
 CONF_TARGET_TEMP = "target_temp"
-CONF_PRECISION = "precision"
 CONF_INITIAL_HVAC_MODE = "initial_hvac_mode"
 
 # Default values

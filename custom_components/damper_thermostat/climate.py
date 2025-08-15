@@ -16,9 +16,6 @@ from homeassistant.const import (
     ATTR_TEMPERATURE,
     CONF_NAME,
     EVENT_HOMEASSISTANT_START,
-    PRECISION_HALVES,
-    PRECISION_TENTHS,
-    PRECISION_WHOLE,
     SERVICE_TURN_OFF,
     SERVICE_TURN_ON,
     STATE_UNAVAILABLE,
@@ -42,7 +39,6 @@ from .const import (
     CONF_MIN_TEMP,
     CONF_MAX_TEMP,
     CONF_TARGET_TEMP,
-    CONF_PRECISION,
     CONF_INITIAL_HVAC_MODE,
     DEFAULT_TOLERANCE,
     DEFAULT_MIN_TEMP,
@@ -53,13 +49,6 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-PRECISION_MAPPING = {
-    PRECISION_TENTHS: 0.1,
-    PRECISION_HALVES: 0.5,
-    PRECISION_WHOLE: 1.0,
-}
-
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -90,7 +79,13 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._attr_unique_id = f"{DOMAIN}_{entry_id}"
         
         # Entity configurations (can be changed via options)
-        self._temperature_sensor_entity_id = options.get(CONF_TEMPERATURE_SENSOR, config[CONF_TEMPERATURE_SENSOR])
+        temp_sensors = options.get(CONF_TEMPERATURE_SENSOR, config[CONF_TEMPERATURE_SENSOR])
+        # Handle both single sensor (string) and multiple sensors (list)
+        if isinstance(temp_sensors, list):
+            self._temperature_sensor_entity_ids = temp_sensors
+        else:
+            self._temperature_sensor_entity_ids = [temp_sensors]
+            
         self._humidity_sensor_entity_id = options.get(CONF_HUMIDITY_SENSOR, config.get(CONF_HUMIDITY_SENSOR))
         self._actuator_switch_entity_id = options.get(CONF_ACTUATOR_SWITCH, config[CONF_ACTUATOR_SWITCH])
         self._main_thermostat_entity_id = options.get(CONF_MAIN_THERMOSTAT, config.get(CONF_MAIN_THERMOSTAT))
@@ -104,8 +99,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._attr_target_temperature_high = 76
         self._attr_target_temperature_low = 72
 
-        precision = options.get(CONF_PRECISION, config.get(CONF_PRECISION, DEFAULT_PRECISION))
-        self._attr_precision = precision
+        self._attr_precision = DEFAULT_PRECISION
         
         # Set initial HVAC mode
         self._attr_hvac_mode = options.get(CONF_INITIAL_HVAC_MODE, config.get(CONF_INITIAL_HVAC_MODE, HVACMode.OFF))
@@ -132,10 +126,10 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         """Run when entity about to be added."""
         await super().async_added_to_hass()
 
-        # Add listener for temperature sensor
+        # Add listeners for temperature sensors
         self.async_on_remove(
             async_track_state_change_event(
-                self.hass, [self._temperature_sensor_entity_id], self._async_sensor_changed
+                self.hass, self._temperature_sensor_entity_ids, self._async_sensor_changed
             )
         )
         
@@ -204,19 +198,36 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
 
     @callback
     def _async_update_temp(self, state) -> None:
-        """Update thermostat with latest state from temperature sensor."""
-        if state is None:
-            state = self.hass.states.get(self._temperature_sensor_entity_id)
-
-        if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+        """Update thermostat with average temperature from all temperature sensors."""
+        # Collect temperatures from all sensors
+        temperatures = []
+        valid_sensors = []
+        
+        for sensor_id in self._temperature_sensor_entity_ids:
+            sensor_state = self.hass.states.get(sensor_id)
+            if sensor_state is not None and sensor_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+                try:
+                    temp = float(sensor_state.state)
+                    temperatures.append(temp)
+                    valid_sensors.append(sensor_id)
+                except ValueError as ex:
+                    _LOGGER.warning("Unable to parse temperature from sensor %s: %s", sensor_id, ex)
+        
+        if not temperatures:
+            _LOGGER.warning("No valid temperature readings from any sensors")
             return
-
-        try:
-            cur_temp = float(state.state)
-            self._cur_temp = cur_temp
-            self._attr_current_temperature = cur_temp
-        except ValueError as ex:
-            _LOGGER.error("Unable to update from temperature sensor: %s", ex)
+        
+        # Calculate average temperature
+        avg_temp = sum(temperatures) / len(temperatures)
+        self._cur_temp = avg_temp
+        self._attr_current_temperature = avg_temp
+        
+        _LOGGER.debug(
+            "Updated temperature: average %.2f°F from %d sensors (%s)",
+            avg_temp,
+            len(temperatures),
+            ", ".join([f"{sensor}: {temp:.1f}" for sensor, temp in zip(valid_sensors, temperatures)])
+        )
 
     @callback
     def _async_update_humidity(self, state) -> None:
@@ -266,7 +277,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
 
         entity_id = event.data.get("entity_id")
         
-        if entity_id == self._temperature_sensor_entity_id:
+        if entity_id in self._temperature_sensor_entity_ids:
             self._async_update_temp(new_state)
         elif entity_id == self._humidity_sensor_entity_id:
             self._async_update_humidity(new_state)

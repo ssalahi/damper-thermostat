@@ -25,13 +25,11 @@ from .const import (
     CONF_MIN_TEMP,
     CONF_MAX_TEMP,
     CONF_TARGET_TEMP,
-    CONF_PRECISION,
     CONF_INITIAL_HVAC_MODE,
     DEFAULT_TOLERANCE,
     DEFAULT_MIN_TEMP,
     DEFAULT_MAX_TEMP,
-    DEFAULT_TARGET_TEMP,
-    DEFAULT_PRECISION,
+    DEFAULT_TARGET_TEMP
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,7 +38,11 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_NAME): cv.string,
         vol.Required(CONF_TEMPERATURE_SENSOR): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+            selector.EntitySelectorConfig(
+                domain="sensor", 
+                device_class="temperature",
+                multiple=True
+            )
         ),
         vol.Optional(CONF_HUMIDITY_SENSOR): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
@@ -66,7 +68,6 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_TARGET_TEMP, default=DEFAULT_TARGET_TEMP): vol.All(
             vol.Coerce(float), vol.Range(min=-40, max=80)
         ),
-        vol.Optional(CONF_PRECISION, default=DEFAULT_PRECISION): vol.In([0.1, 0.5, 1.0]),
         vol.Optional(CONF_INITIAL_HVAC_MODE, default=HVACMode.AUTO): vol.In(
             [HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.OFF]
         ),
@@ -90,8 +91,19 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         errors = {}
 
-        # Validate that entities exist
-        if not self.hass.states.get(user_input[CONF_TEMPERATURE_SENSOR]):
+        # Validate temperature sensors (can be single entity or list of entities)
+        temp_sensors = user_input[CONF_TEMPERATURE_SENSOR]
+        if isinstance(temp_sensors, str):
+            # Single sensor
+            if not self.hass.states.get(temp_sensors):
+                errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
+        elif isinstance(temp_sensors, list):
+            # Multiple sensors
+            for sensor in temp_sensors:
+                if not self.hass.states.get(sensor):
+                    errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
+                    break
+        else:
             errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
         
         if user_input.get(CONF_HUMIDITY_SENSOR) and not self.hass.states.get(user_input[CONF_HUMIDITY_SENSOR]):
@@ -132,7 +144,19 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             # Validate that entities exist
             errors = {}
             
-            if not self.hass.states.get(user_input[CONF_TEMPERATURE_SENSOR]):
+            # Validate temperature sensors (can be single entity or list of entities)
+            temp_sensors = user_input[CONF_TEMPERATURE_SENSOR]
+            if isinstance(temp_sensors, str):
+                # Single sensor
+                if not self.hass.states.get(temp_sensors):
+                    errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
+            elif isinstance(temp_sensors, list):
+                # Multiple sensors
+                for sensor in temp_sensors:
+                    if not self.hass.states.get(sensor):
+                        errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
+                        break
+            else:
                 errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
             
             if user_input.get(CONF_HUMIDITY_SENSOR) and not self.hass.states.get(user_input[CONF_HUMIDITY_SENSOR]):
@@ -190,7 +214,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_TEMPERATURE_SENSOR,
                     default=get_current_value(CONF_TEMPERATURE_SENSOR, "")
                 ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+                    selector.EntitySelectorConfig(
+                        domain="sensor", 
+                        device_class="temperature",
+                        multiple=True
+                    )
                 ),
                 vol.Optional(
                     CONF_HUMIDITY_SENSOR,
@@ -230,10 +258,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_TARGET_TEMP, 
                     default=get_current_value(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP)
                 ): vol.All(vol.Coerce(float), vol.Range(min=-60, max=80)),
-                vol.Optional(
-                    CONF_PRECISION, 
-                    default=get_current_value(CONF_PRECISION, DEFAULT_PRECISION)
-                ): vol.In([0.1, 0.5, 1.0]),
                 vol.Optional(
                     CONF_INITIAL_HVAC_MODE, 
                     default=get_current_value(CONF_INITIAL_HVAC_MODE, HVACMode.AUTO)

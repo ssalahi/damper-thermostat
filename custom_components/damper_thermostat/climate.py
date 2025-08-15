@@ -107,7 +107,9 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._attr_min_temp = options.get(CONF_MIN_TEMP, config.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP))
         self._attr_max_temp = options.get(CONF_MAX_TEMP, config.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP))
         self._attr_target_temperature = options.get(CONF_TARGET_TEMP, config.get(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP))
-        
+        self._attr_target_temperature_high = 76
+        self._attr_target_temperature_low = 72
+
         precision = options.get(CONF_PRECISION, config.get(CONF_PRECISION, DEFAULT_PRECISION))
         self._attr_precision = precision
         

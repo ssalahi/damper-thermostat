@@ -463,8 +463,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             name=self._attr_name,
             manufacturer="Damper Thermostat",
             model="Smart Damper Controller",
-            sw_version="1.0.0",
-            default_model=
+            sw_version="1.0.0"
         )
 
     @property

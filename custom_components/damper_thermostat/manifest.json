@@ -8,5 +8,6 @@
   "codeowners": ["@ssalahi"],
   "requirements": [],
   "config_flow": true,
-  "iot_class": "local_polling"
+  "iot_class": "local_polling",
+  "integration_type": "device"
 }

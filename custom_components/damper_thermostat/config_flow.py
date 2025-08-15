@@ -35,19 +35,10 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-def _get_schema_with_defaults(defaults: dict[str, Any] | None = None) -> vol.Schema:
-    """Get the schema with optional default values."""
+def _get_config_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    """Get the config schema for immutable setup data."""
     if defaults is None:
         defaults = {}
-    
-    # Helper function to get default value, filtering out empty values
-    def get_default(key: str, fallback: Any) -> Any:
-        value = defaults.get(key, fallback)
-        # Don't use empty strings or empty lists as defaults for entity selectors
-        if key in [CONF_TEMPERATURE_SENSOR, CONF_HUMIDITY_SENSOR, CONF_ACTUATOR_SWITCH, CONF_MAIN_THERMOSTAT]:
-            if not value or (isinstance(value, list) and len(value) == 0):
-                return vol.UNDEFINED
-        return value
     
     schema_dict = {}
     
@@ -102,8 +93,14 @@ def _get_schema_with_defaults(defaults: dict[str, Any] | None = None) -> vol.Sch
             selector.EntitySelectorConfig(domain="climate")
         )
     
-    # Numeric fields with defaults
-    schema_dict.update({
+    return vol.Schema(schema_dict)
+
+def _get_options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    """Get the options schema for mutable runtime options."""
+    if defaults is None:
+        defaults = {}
+    
+    return vol.Schema({
         vol.Optional(
             CONF_COLD_TOLERANCE, 
             default=defaults.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)
@@ -129,12 +126,10 @@ def _get_schema_with_defaults(defaults: dict[str, Any] | None = None) -> vol.Sch
             default=defaults.get(CONF_INITIAL_HVAC_MODE, HVACMode.AUTO)
         ): vol.In([HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.OFF]),
     })
-    
-    return vol.Schema(schema_dict)
 
 def _get_user_schema() -> vol.Schema:
-    """Get the user schema with default values."""
-    return _get_schema_with_defaults()
+    """Get the user schema for initial setup."""
+    return _get_config_schema()
 
 
 @config_entries.HANDLERS.register(DOMAIN)
@@ -215,7 +210,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=_get_schema_with_defaults(defaults),
+            data_schema=_get_config_schema(defaults),
             errors=errors,
         )
 
@@ -287,8 +282,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             
             if user_input is not None:
                 try:
-                    # Validate entities exist
-                    errors = await self._validate_options_entities(user_input)
+                    # Validate options data
+                    errors = await self._validate_options_data(user_input)
                     
                     if not errors:
                         # Update the config entry title if name changed
@@ -306,7 +301,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
             # Get schema safely
             try:
-                schema = self._get_options_schema()
+                schema = self._get_options_flow_schema()
             except Exception as ex:
                 _LOGGER.exception("Error getting options schema: %s", ex)
                 return self.async_abort(reason="unknown")
@@ -327,20 +322,17 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             _LOGGER.exception("Critical error in options flow init: %s", ex)
             return self.async_abort(reason="unknown")
 
-    def _get_options_schema(self) -> vol.Schema:
-        """Get the options schema with current values."""
+    def _get_options_flow_schema(self) -> vol.Schema:
+        """Get the options schema with current values (only mutable options)."""
         try:
             # Ensure config_entry exists and has required attributes
             if not self.config_entry:
                 _LOGGER.error("Config entry is None in options flow")
-                return vol.Schema({
-                    vol.Optional(CONF_NAME, default="Damper Thermostat"): cv.string,
-                })
+                return _get_options_schema()
             
             # Get current values from both config entry data and options
             current_data = getattr(self.config_entry, 'data', None) or {}
             current_options = getattr(self.config_entry, 'options', None) or {}
-            entry_title = getattr(self.config_entry, 'title', None) or "Damper Thermostat"
             
             # Use options if available, otherwise fall back to config data
             def get_current_value(key: str, default: Any) -> Any:
@@ -353,13 +345,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 except (AttributeError, TypeError, KeyError):
                     return default
             
-            # Build defaults dictionary with safe access
+            # Build defaults dictionary with safe access (only mutable options)
             defaults = {
-                CONF_NAME: get_current_value(CONF_NAME, entry_title),
-                CONF_TEMPERATURE_SENSOR: get_current_value(CONF_TEMPERATURE_SENSOR, []),
-                CONF_HUMIDITY_SENSOR: get_current_value(CONF_HUMIDITY_SENSOR, None),
-                CONF_ACTUATOR_SWITCH: get_current_value(CONF_ACTUATOR_SWITCH, ""),
-                CONF_MAIN_THERMOSTAT: get_current_value(CONF_MAIN_THERMOSTAT, None),
                 CONF_COLD_TOLERANCE: get_current_value(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE),
                 CONF_HOT_TOLERANCE: get_current_value(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE),
                 CONF_MIN_TEMP: get_current_value(CONF_MIN_TEMP, DEFAULT_MIN_TEMP),
@@ -368,51 +355,18 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 CONF_INITIAL_HVAC_MODE: get_current_value(CONF_INITIAL_HVAC_MODE, HVACMode.AUTO),
             }
             
-            return _get_schema_with_defaults(defaults)
+            return _get_options_schema(defaults)
             
         except Exception as ex:
             _LOGGER.exception("Error creating options schema: %s", ex)
             # Return a minimal schema as fallback
-            return vol.Schema({
-                vol.Optional(CONF_NAME, default="Damper Thermostat"): cv.string,
-            })
+            return _get_options_schema()
 
-    async def _validate_options_entities(self, user_input: dict[str, Any]) -> dict[str, str]:
-        """Validate that all entities exist for options flow."""
+    async def _validate_options_data(self, user_input: dict[str, Any]) -> dict[str, str]:
+        """Validate options data (no entity validation needed for options)."""
         errors: dict[str, str] = {}
-
-        # Validate temperature sensors (can be single entity or list of entities)
-        temp_sensors = user_input.get(CONF_TEMPERATURE_SENSOR)
-        if not temp_sensors:
-            errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
-        elif isinstance(temp_sensors, str):
-            # Single sensor
-            if not self.hass.states.get(temp_sensors):
-                errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
-        elif isinstance(temp_sensors, list):
-            # Multiple sensors
-            for sensor in temp_sensors:
-                if not self.hass.states.get(sensor):
-                    errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
-                    break
-        else:
-            errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
         
-        # Validate humidity sensor
-        humidity_sensor = user_input.get(CONF_HUMIDITY_SENSOR)
-        if humidity_sensor and not self.hass.states.get(humidity_sensor):
-            errors[CONF_HUMIDITY_SENSOR] = "entity_not_found"
-                
-        # Validate actuator switch
-        actuator_switch = user_input.get(CONF_ACTUATOR_SWITCH)
-        if not actuator_switch:
-            errors[CONF_ACTUATOR_SWITCH] = "entity_not_found"
-        elif not self.hass.states.get(actuator_switch):
-            errors[CONF_ACTUATOR_SWITCH] = "entity_not_found"
-                
-        # Validate main thermostat
-        main_thermostat = user_input.get(CONF_MAIN_THERMOSTAT)
-        if main_thermostat and not self.hass.states.get(main_thermostat):
-            errors[CONF_MAIN_THERMOSTAT] = "entity_not_found"
-
+        # Options flow only handles numeric values and modes, no entity validation needed
+        # All validation is handled by the schema constraints
+        
         return errors

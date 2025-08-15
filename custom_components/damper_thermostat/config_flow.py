@@ -248,50 +248,83 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Manage the options."""
         errors: dict[str, str] = {}
         
-        if user_input is not None:
-            try:
-                # Validate entities exist
-                errors = await self._validate_options_entities(user_input)
-                
-                if not errors:
-                    # Update the config entry title if name changed
-                    if user_input.get(CONF_NAME) and user_input[CONF_NAME] != self.config_entry.title:
-                        self.hass.config_entries.async_update_entry(
-                            self.config_entry, title=user_input[CONF_NAME]
-                        )
+        try:
+            # Ensure we have a valid config entry
+            if not self.config_entry:
+                _LOGGER.error("Config entry is None in options flow init")
+                return self.async_abort(reason="unknown")
+            
+            if user_input is not None:
+                try:
+                    # Validate entities exist
+                    errors = await self._validate_options_entities(user_input)
                     
-                    return self.async_create_entry(title="", data=user_input)
+                    if not errors:
+                        # Update the config entry title if name changed
+                        current_title = getattr(self.config_entry, 'title', None)
+                        if user_input.get(CONF_NAME) and user_input[CONF_NAME] != current_title:
+                            self.hass.config_entries.async_update_entry(
+                                self.config_entry, title=user_input[CONF_NAME]
+                            )
+                        
+                        return self.async_create_entry(title="", data=user_input)
 
+                except Exception as ex:
+                    _LOGGER.exception("Unexpected error during options validation: %s", ex)
+                    errors["base"] = "unknown"
+
+            # Get schema safely
+            try:
+                schema = self._get_options_schema()
             except Exception as ex:
-                _LOGGER.exception("Unexpected error during options validation: %s", ex)
-                errors["base"] = "unknown"
+                _LOGGER.exception("Error getting options schema: %s", ex)
+                return self.async_abort(reason="unknown")
 
-        return self.async_show_form(
-            step_id="init",
-            data_schema=self._get_options_schema(),
-            errors=errors,
-            description_placeholders={
-                "name": self.config_entry.title,
-            },
-        )
+            # Get title safely
+            entry_title = getattr(self.config_entry, 'title', None) or "Damper Thermostat"
+
+            return self.async_show_form(
+                step_id="init",
+                data_schema=schema,
+                errors=errors,
+                description_placeholders={
+                    "name": entry_title,
+                },
+            )
+            
+        except Exception as ex:
+            _LOGGER.exception("Critical error in options flow init: %s", ex)
+            return self.async_abort(reason="unknown")
 
     def _get_options_schema(self) -> vol.Schema:
         """Get the options schema with current values."""
         try:
+            # Ensure config_entry exists and has required attributes
+            if not self.config_entry:
+                _LOGGER.error("Config entry is None in options flow")
+                return vol.Schema({
+                    vol.Optional(CONF_NAME, default="Damper Thermostat"): cv.string,
+                })
+            
             # Get current values from both config entry data and options
-            current_data = self.config_entry.data or {}
-            current_options = self.config_entry.options or {}
+            current_data = getattr(self.config_entry, 'data', None) or {}
+            current_options = getattr(self.config_entry, 'options', None) or {}
+            entry_title = getattr(self.config_entry, 'title', None) or "Damper Thermostat"
             
             # Use options if available, otherwise fall back to config data
             def get_current_value(key: str, default: Any) -> Any:
                 try:
-                    return current_options.get(key, current_data.get(key, default))
-                except (AttributeError, TypeError):
+                    if isinstance(current_options, dict) and key in current_options:
+                        return current_options[key]
+                    if isinstance(current_data, dict) and key in current_data:
+                        return current_data[key]
+                    return default
+                except (AttributeError, TypeError, KeyError):
                     return default
             
-            # Build defaults dictionary
+            # Build defaults dictionary with safe access
             defaults = {
-                CONF_NAME: get_current_value(CONF_NAME, self.config_entry.title or "Damper Thermostat"),
+                CONF_NAME: get_current_value(CONF_NAME, entry_title),
                 CONF_TEMPERATURE_SENSOR: get_current_value(CONF_TEMPERATURE_SENSOR, []),
                 CONF_HUMIDITY_SENSOR: get_current_value(CONF_HUMIDITY_SENSOR, None),
                 CONF_ACTUATOR_SWITCH: get_current_value(CONF_ACTUATOR_SWITCH, ""),

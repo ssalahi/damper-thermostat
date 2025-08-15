@@ -13,6 +13,8 @@ CONF_ACTUATOR_SWITCH = "actuator_switch"
 CONF_MAIN_THERMOSTAT = "main_thermostat"
 CONF_COLD_TOLERANCE = "cold_tolerance"
 CONF_HOT_TOLERANCE = "hot_tolerance"
+CONF_COLD_TOLERANCE_AUTO = "cold_tolerance_auto"
+CONF_HOT_TOLERANCE_AUTO = "hot_tolerance_auto"
 CONF_MIN_TEMP = "min_temp"
 CONF_MAX_TEMP = "max_temp"
 CONF_TARGET_TEMP = "target_temp"
@@ -29,7 +31,7 @@ DEFAULT_PRECISION = 0.1
 # Supported features
 SUPPORT_FLAGS = (
     ClimateEntityFeature.TARGET_TEMPERATURE
-    | ClimateEntityFeature.TARGET_HUMIDITY
+    | ClimateEntityFeature.TARGET_HUMIDITY | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
 )
 
 # Supported HVAC modes

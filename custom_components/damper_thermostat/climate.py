@@ -121,7 +121,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._attr_temperature_unit = UnitOfTemperature.FAHRENHEIT
         
         # Supported features and modes
-        self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
+        self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
         if self._humidity_sensor_entity_id:
             self._attr_supported_features |= ClimateEntityFeature.TARGET_HUMIDITY
             
@@ -462,6 +462,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             manufacturer="Damper Thermostat",
             model="Smart Damper Controller",
             sw_version="1.0.0",
+            default_model=
         )
 
     @property

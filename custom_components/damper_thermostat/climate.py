@@ -199,73 +199,82 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
     @callback
     def _async_update_temp(self, state) -> None:
         """Update thermostat with average temperature from all temperature sensors."""
-        # Collect temperatures from all sensors
-        temperatures = []
-        valid_sensors = []
-        
-        for sensor_id in self._temperature_sensor_entity_ids:
-            sensor_state = self.hass.states.get(sensor_id)
-            if sensor_state is not None and sensor_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-                try:
-                    temp = float(sensor_state.state)
-                    temperatures.append(temp)
-                    valid_sensors.append(sensor_id)
-                except ValueError as ex:
-                    _LOGGER.warning("Unable to parse temperature from sensor %s: %s", sensor_id, ex)
-        
-        if not temperatures:
-            _LOGGER.warning("No valid temperature readings from any sensors")
-            return
-        
-        # Calculate average temperature
-        avg_temp = sum(temperatures) / len(temperatures)
-        self._cur_temp = avg_temp
-        self._attr_current_temperature = avg_temp
-        
-        _LOGGER.debug(
-            "Updated temperature: average %.2f°F from %d sensors (%s)",
-            avg_temp,
-            len(temperatures),
-            ", ".join([f"{sensor}: {temp:.1f}" for sensor, temp in zip(valid_sensors, temperatures)])
-        )
+        try:
+            # Collect temperatures from all sensors
+            temperatures = []
+            valid_sensors = []
+            
+            for sensor_id in self._temperature_sensor_entity_ids:
+                sensor_state = self.hass.states.get(sensor_id)
+                if sensor_state is not None and sensor_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+                    try:
+                        temp = float(sensor_state.state)
+                        temperatures.append(temp)
+                        valid_sensors.append(sensor_id)
+                    except ValueError as ex:
+                        _LOGGER.warning("Unable to parse temperature from sensor %s: %s", sensor_id, ex)
+            
+            if not temperatures:
+                _LOGGER.warning("No valid temperature readings from any sensors")
+                return
+            
+            # Calculate average temperature
+            avg_temp = sum(temperatures) / len(temperatures)
+            self._cur_temp = avg_temp
+            self._attr_current_temperature = avg_temp
+            
+            _LOGGER.debug(
+                "Updated temperature: average %.2f°F from %d sensors (%s)",
+                avg_temp,
+                len(temperatures),
+                ", ".join([f"{sensor}: {temp:.1f}" for sensor, temp in zip(valid_sensors, temperatures)])
+            )
+        except Exception as ex:
+            _LOGGER.error("Error updating temperature: %s", ex)
 
     @callback
     def _async_update_humidity(self, state) -> None:
         """Update thermostat with latest state from humidity sensor."""
-        if state is None:
-            state = self.hass.states.get(self._humidity_sensor_entity_id)
-
-        if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-            return
-
         try:
+            if state is None:
+                state = self.hass.states.get(self._humidity_sensor_entity_id)
+
+            if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+                return
+
             cur_humidity = float(state.state)
             self._cur_humidity = cur_humidity
             self._attr_current_humidity = cur_humidity
-        except ValueError as ex:
+        except (ValueError, AttributeError) as ex:
             _LOGGER.error("Unable to update from humidity sensor: %s", ex)
+        except Exception as ex:
+            _LOGGER.error("Unexpected error updating humidity: %s", ex)
 
     @callback
     def _async_update_main_thermostat_state(self, state) -> None:
         """Update thermostat action based on main thermostat state."""
-        if state is None:
-            state = self.hass.states.get(self._main_thermostat_entity_id)
+        try:
+            if state is None:
+                state = self.hass.states.get(self._main_thermostat_entity_id)
 
-        if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-            return
+            if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+                return
 
-        # Map main thermostat's hvac_action to our hvac_action
-        main_action = state.attributes.get("hvac_action", HVACAction.OFF)
-        
-        if main_action == HVACAction.HEATING:
-            self._attr_hvac_action = HVACAction.HEATING
-        elif main_action == HVACAction.COOLING:
-            self._attr_hvac_action = HVACAction.COOLING
-        elif main_action == HVACAction.FAN:
-            self._attr_hvac_action = HVACAction.FAN
-        elif main_action == HVACAction.IDLE:
-            self._attr_hvac_action = HVACAction.IDLE
-        else:
+            # Map main thermostat's hvac_action to our hvac_action
+            main_action = state.attributes.get("hvac_action", HVACAction.OFF) if state.attributes else HVACAction.OFF
+            
+            if main_action == HVACAction.HEATING:
+                self._attr_hvac_action = HVACAction.HEATING
+            elif main_action == HVACAction.COOLING:
+                self._attr_hvac_action = HVACAction.COOLING
+            elif main_action == HVACAction.FAN:
+                self._attr_hvac_action = HVACAction.FAN
+            elif main_action == HVACAction.IDLE:
+                self._attr_hvac_action = HVACAction.IDLE
+            else:
+                self._attr_hvac_action = HVACAction.OFF
+        except Exception as ex:
+            _LOGGER.error("Error updating main thermostat state: %s", ex)
             self._attr_hvac_action = HVACAction.OFF
 
     @callback
@@ -500,7 +509,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
             name=self._attr_name,
-            manufacturer="Damper Thermostat",
-            model="Smart Damper Controller",
+            manufacturer="SSalahi",
+            model="Smart Damper Thermostat",
             sw_version="1.0.0"
         )

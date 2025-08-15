@@ -92,6 +92,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         try:
+            # Create unique ID based on actuator switch (primary identifier)
+            actuator_switch = user_input.get(CONF_ACTUATOR_SWITCH)
+            if actuator_switch:
+                unique_id = f"{DOMAIN}_{actuator_switch}"
+                await self.async_set_unique_id(unique_id)
+                self._abort_if_unique_id_configured()
+
             # Validate temperature sensors (can be single entity or list of entities)
             temp_sensors = user_input.get(CONF_TEMPERATURE_SENSOR)
             if not temp_sensors:
@@ -129,7 +136,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors[CONF_HUMIDITY_SENSOR] = "entity_not_found"
                     
             # Validate actuator switch
-            actuator_switch = user_input.get(CONF_ACTUATOR_SWITCH)
             if not actuator_switch:
                 errors[CONF_ACTUATOR_SWITCH] = "entity_not_found"
             else:

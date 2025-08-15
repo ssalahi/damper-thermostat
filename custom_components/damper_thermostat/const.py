@@ -31,7 +31,7 @@ DEFAULT_PRECISION = 0.1
 # Supported features
 SUPPORT_FLAGS = (
     ClimateEntityFeature.TARGET_TEMPERATURE
-    | ClimateEntityFeature.TARGET_HUMIDITY | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
+    | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
 )
 
 # Supported HVAC modes

@@ -27,14 +27,9 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import (
-    async_track_state_change_event,
-    async_track_time_interval,
-)
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.util.unit_conversion import TemperatureConverter
-import homeassistant.util.dt as dt_util
 
 from .const import (
     DOMAIN,
@@ -54,7 +49,6 @@ from .const import (
     DEFAULT_MAX_TEMP,
     DEFAULT_TARGET_TEMP,
     DEFAULT_PRECISION,
-    SUPPORT_FLAGS,
     HVAC_MODES,
 )
 
@@ -124,8 +118,6 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         
         # Supported features and modes
         self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
-        if self._humidity_sensor_entity_id:
-            self._attr_supported_features |= ClimateEntityFeature.TARGET_HUMIDITY
             
         self._attr_hvac_modes = HVAC_MODES
         
@@ -465,8 +457,3 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             model="Smart Damper Controller",
             sw_version="1.0.0"
         )
-
-    @property
-    def device_class(self):
-        """Return the device class of this entity."""
-        return "thermostat"

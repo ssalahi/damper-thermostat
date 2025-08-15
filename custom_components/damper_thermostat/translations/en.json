@@ -17,10 +17,32 @@
           "target_temp": "Initial Target Temperature",
           "initial_hvac_mode": "Initial HVAC Mode"
         }
+      },
+      "reconfigure": {
+        "title": "[%key:common::config_flow::title::reconfigure%]",
+        "description": "Update the configuration for your Damper Thermostat",
+        "data": {
+          "name": "Name",
+          "temperature_sensor": "Temperature Sensor",
+          "humidity_sensor": "Humidity Sensor (Optional)",
+          "actuator_switch": "Actuator Switch",
+          "main_thermostat": "Main Thermostat (Optional)",
+          "cold_tolerance": "Cold Tolerance",
+          "hot_tolerance": "Hot Tolerance",
+          "min_temp": "Minimum Temperature",
+          "max_temp": "Maximum Temperature",
+          "target_temp": "Target Temperature",
+          "initial_hvac_mode": "HVAC Mode"
+        }
       }
     },
     "error": {
-      "entity_not_found": "Entity not found"
+      "entity_not_found": "Entity not found",
+      "unknown": "Unknown error occurred"
+    },
+    "abort": {
+      "already_configured": "A Damper Thermostat with this actuator switch is already configured",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
     }
   },
   "options": {

@@ -11,6 +11,7 @@ from homeassistant.components.climate.const import HVACMode
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.config_entries import SOURCE_RECONFIGURE
 from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
 
@@ -34,48 +35,75 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Define schema as a function to avoid recreation issues
-def _get_user_schema() -> vol.Schema:
-    """Get the user schema."""
+def _get_schema_with_defaults(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    """Get the schema with optional default values."""
+    if defaults is None:
+        defaults = {}
+    
     return vol.Schema(
         {
-            vol.Required(CONF_NAME): cv.string,
-            vol.Required(CONF_TEMPERATURE_SENSOR): selector.EntitySelector(
+            vol.Required(
+                CONF_NAME, 
+                default=defaults.get(CONF_NAME, "")
+            ): cv.string,
+            vol.Required(
+                CONF_TEMPERATURE_SENSOR,
+                default=defaults.get(CONF_TEMPERATURE_SENSOR, [])
+            ): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain="sensor", 
                     device_class="temperature",
                     multiple=True
                 )
             ),
-            vol.Optional(CONF_HUMIDITY_SENSOR): selector.EntitySelector(
+            vol.Optional(
+                CONF_HUMIDITY_SENSOR,
+                default=defaults.get(CONF_HUMIDITY_SENSOR)
+            ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
             ),
-            vol.Required(CONF_ACTUATOR_SWITCH): selector.EntitySelector(
+            vol.Required(
+                CONF_ACTUATOR_SWITCH,
+                default=defaults.get(CONF_ACTUATOR_SWITCH, "")
+            ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="switch")
             ),
-            vol.Optional(CONF_MAIN_THERMOSTAT): selector.EntitySelector(
+            vol.Optional(
+                CONF_MAIN_THERMOSTAT,
+                default=defaults.get(CONF_MAIN_THERMOSTAT)
+            ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="climate")
             ),
-            vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): vol.All(
-                vol.Coerce(float), vol.Range(min=0.1, max=10.0)
-            ),
-            vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): vol.All(
-                vol.Coerce(float), vol.Range(min=0.1, max=10.0)
-            ),
-            vol.Optional(CONF_MIN_TEMP, default=DEFAULT_MIN_TEMP): vol.All(
-                vol.Coerce(float), vol.Range(min=-40, max=70)
-            ),
-            vol.Optional(CONF_MAX_TEMP, default=DEFAULT_MAX_TEMP): vol.All(
-                vol.Coerce(float), vol.Range(min=70, max=100)
-            ),
-            vol.Optional(CONF_TARGET_TEMP, default=DEFAULT_TARGET_TEMP): vol.All(
-                vol.Coerce(float), vol.Range(min=-40, max=80)
-            ),
-            vol.Optional(CONF_INITIAL_HVAC_MODE, default=HVACMode.AUTO): vol.In(
-                [HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.OFF]
-            ),
+            vol.Optional(
+                CONF_COLD_TOLERANCE, 
+                default=defaults.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)
+            ): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=10.0)),
+            vol.Optional(
+                CONF_HOT_TOLERANCE, 
+                default=defaults.get(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE)
+            ): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=10.0)),
+            vol.Optional(
+                CONF_MIN_TEMP, 
+                default=defaults.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
+            ): vol.All(vol.Coerce(float), vol.Range(min=-40, max=70)),
+            vol.Optional(
+                CONF_MAX_TEMP, 
+                default=defaults.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
+            ): vol.All(vol.Coerce(float), vol.Range(min=70, max=100)),
+            vol.Optional(
+                CONF_TARGET_TEMP, 
+                default=defaults.get(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP)
+            ): vol.All(vol.Coerce(float), vol.Range(min=-40, max=80)),
+            vol.Optional(
+                CONF_INITIAL_HVAC_MODE, 
+                default=defaults.get(CONF_INITIAL_HVAC_MODE, HVACMode.AUTO)
+            ): vol.In([HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.OFF]),
         }
     )
+
+def _get_user_schema() -> vol.Schema:
+    """Get the user schema with default values."""
+    return _get_schema_with_defaults()
 
 
 @config_entries.HANDLERS.register(DOMAIN)
@@ -116,6 +144,48 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user", 
             data_schema=_get_user_schema(), 
             errors=errors
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle reconfiguration of the integration."""
+        errors: dict[str, str] = {}
+        
+        if user_input is not None:
+            try:
+                # For reconfigure, we need to validate the new actuator switch
+                # and ensure unique ID consistency
+                actuator_switch = user_input.get(CONF_ACTUATOR_SWITCH)
+                if actuator_switch:
+                    unique_id = f"{DOMAIN}_{actuator_switch}"
+                    await self.async_set_unique_id(unique_id)
+                    self._abort_if_unique_id_mismatch()
+
+                # Validate entities exist
+                errors = await self._validate_entities(user_input)
+                
+                if not errors:
+                    return self.async_update_reload_and_abort(
+                        self._get_reconfigure_entry(),
+                        data_updates=user_input,
+                    )
+
+            except Exception as ex:
+                _LOGGER.exception("Unexpected error during reconfiguration: %s", ex)
+                errors["base"] = "unknown"
+
+        # Get current config entry for pre-filling the form
+        reconfigure_entry = self._get_reconfigure_entry()
+        current_data = reconfigure_entry.data or {}
+        
+        # Add the entry title as the default name
+        defaults = {**current_data, CONF_NAME: current_data.get(CONF_NAME, reconfigure_entry.title)}
+        
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=_get_schema_with_defaults(defaults),
+            errors=errors,
         )
 
     async def _validate_entities(self, user_input: dict[str, Any]) -> dict[str, str]:
@@ -219,66 +289,23 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 except (AttributeError, TypeError):
                     return default
             
-            return vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_NAME, 
-                        default=get_current_value(CONF_NAME, self.config_entry.title or "Damper Thermostat")
-                    ): cv.string,
-                    vol.Required(
-                        CONF_TEMPERATURE_SENSOR,
-                        default=get_current_value(CONF_TEMPERATURE_SENSOR, [])
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain="sensor", 
-                            device_class="temperature",
-                            multiple=True
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_HUMIDITY_SENSOR,
-                        default=get_current_value(CONF_HUMIDITY_SENSOR, None)
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
-                    ),
-                    vol.Required(
-                        CONF_ACTUATOR_SWITCH,
-                        default=get_current_value(CONF_ACTUATOR_SWITCH, "")
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(domain="switch")
-                    ),
-                    vol.Optional(
-                        CONF_MAIN_THERMOSTAT,
-                        default=get_current_value(CONF_MAIN_THERMOSTAT, None)
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(domain="climate")
-                    ),
-                    vol.Optional(
-                        CONF_COLD_TOLERANCE, 
-                        default=get_current_value(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)
-                    ): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=10.0)),
-                    vol.Optional(
-                        CONF_HOT_TOLERANCE, 
-                        default=get_current_value(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE)
-                    ): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=10.0)),
-                    vol.Optional(
-                        CONF_MIN_TEMP, 
-                        default=get_current_value(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
-                    ): vol.All(vol.Coerce(float), vol.Range(min=-40, max=70)),
-                    vol.Optional(
-                        CONF_MAX_TEMP, 
-                        default=get_current_value(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
-                    ): vol.All(vol.Coerce(float), vol.Range(min=70, max=100)),
-                    vol.Optional(
-                        CONF_TARGET_TEMP, 
-                        default=get_current_value(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP)
-                    ): vol.All(vol.Coerce(float), vol.Range(min=-60, max=80)),
-                    vol.Optional(
-                        CONF_INITIAL_HVAC_MODE, 
-                        default=get_current_value(CONF_INITIAL_HVAC_MODE, HVACMode.AUTO)
-                    ): vol.In([HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.OFF]),
-                }
-            )
+            # Build defaults dictionary
+            defaults = {
+                CONF_NAME: get_current_value(CONF_NAME, self.config_entry.title or "Damper Thermostat"),
+                CONF_TEMPERATURE_SENSOR: get_current_value(CONF_TEMPERATURE_SENSOR, []),
+                CONF_HUMIDITY_SENSOR: get_current_value(CONF_HUMIDITY_SENSOR, None),
+                CONF_ACTUATOR_SWITCH: get_current_value(CONF_ACTUATOR_SWITCH, ""),
+                CONF_MAIN_THERMOSTAT: get_current_value(CONF_MAIN_THERMOSTAT, None),
+                CONF_COLD_TOLERANCE: get_current_value(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE),
+                CONF_HOT_TOLERANCE: get_current_value(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE),
+                CONF_MIN_TEMP: get_current_value(CONF_MIN_TEMP, DEFAULT_MIN_TEMP),
+                CONF_MAX_TEMP: get_current_value(CONF_MAX_TEMP, DEFAULT_MAX_TEMP),
+                CONF_TARGET_TEMP: get_current_value(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP),
+                CONF_INITIAL_HVAC_MODE: get_current_value(CONF_INITIAL_HVAC_MODE, HVACMode.AUTO),
+            }
+            
+            return _get_schema_with_defaults(defaults)
+            
         except Exception as ex:
             _LOGGER.exception("Error creating options schema: %s", ex)
             # Return a minimal schema as fallback

@@ -398,25 +398,34 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
                 return
                 
             main_action = main_state.attributes.get("hvac_action", HVACAction.OFF)
+            main_mode = main_state.attributes.get("hvac_mode", HVACMode.OFF)
             
-            # Only activate our actuator if the main thermostat is actively heating/cooling
-            # and our temperature conditions warrant it
-            should_activate = False
+            # Deciding based on the low/high target temp and main thermostat current state
+            # and our temperature to know if actuator needs to be closed or not
+            should_deactivate = False
             
-            if main_action == HVACAction.HEATING and self._attr_hvac_mode in [HVACMode.HEAT, HVACMode.AUTO]:
-                too_cold = self._attr_target_temperature >= self._cur_temp + self._cold_tolerance
-                should_activate = too_cold
-            elif main_action == HVACAction.COOLING and self._attr_hvac_mode in [HVACMode.COOL, HVACMode.AUTO]:
-                too_hot = self._cur_temp >= self._attr_target_temperature + self._hot_tolerance
-                should_activate = too_hot
-                
+            if self._attr_hvac_mode in [HVACMode.AUTO, HVACMode.HEAT_COOL]:
+                if main_mode == HVACMode.COOL:
+                    enough_cold = self._attr_target_temperature_low >= (self._cur_temp + self._cold_tolerance)
+                if main_mode == HVACMode.HEAT:
+                    enough_heat = self._attr_target_temperature_high <= (self._cur_temp - self._hot_tolerance)
+                should_deactivate = enough_cold or enough_heat
+            
+            if self._attr_hvac_mode == HVACMode.COOL and main_action == HVACAction.COOLING:
+                enough_cold = self._attr_target_temperature >= (self._cur_temp + self._cold_tolerance)
+            
+            if self._attr_hvac_mode == HVACMode.HEAT and main_action in [HVACAction.HEATING, HVACAction.PREHEATING]:
+                enough_heat = self._attr_target_temperature <= (self._cur_temp - self._hot_tolerance)
+
+            should_deactivate = enough_cold or enough_heat
+                            
             current_device_active = await self._async_is_device_active()
-            if should_activate and not current_device_active:
+            if should_deactivate and current_device_active:
+                _LOGGER.info("Conditions not met, turning off actuator %s", self._actuator_switch_entity_id)                
+                await self._async_actuator_turn_off()
+            elif not should_deactivate and not current_device_active:
                 _LOGGER.info("Main thermostat active, turning on actuator %s", self._actuator_switch_entity_id)
                 await self._async_actuator_turn_on()
-            elif not should_activate and current_device_active:
-                _LOGGER.info("Conditions not met, turning off actuator %s", self._actuator_switch_entity_id)
-                await self._async_actuator_turn_off()
         except Exception as ex:
             _LOGGER.error("Error in main thermostat control: %s", ex)
 

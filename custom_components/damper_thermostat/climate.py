@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Any
+from types import MappingProxyType
 
 from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate.const import (
@@ -39,11 +40,15 @@ from .const import (
     CONF_MIN_TEMP,
     CONF_MAX_TEMP,
     CONF_TARGET_TEMP,
+    CONF_TARGET_TEMP_LOW,
+    CONF_TARGET_TEMP_HIGH,
     CONF_INITIAL_HVAC_MODE,
     DEFAULT_TOLERANCE,
     DEFAULT_MIN_TEMP,
     DEFAULT_MAX_TEMP,
     DEFAULT_TARGET_TEMP,
+    DEFAULT_TARGET_TEMP_LOW,
+    DEFAULT_TARGET_TEMP_HIGH,
     DEFAULT_PRECISION,
     HVAC_MODES,
 )
@@ -65,7 +70,7 @@ async def async_setup_entry(
 class DamperThermostat(ClimateEntity, RestoreEntity):
     """Representation of a Damper Thermostat device."""
 
-    def __init__(self, hass: HomeAssistant, config: dict[str, Any], entry_id: str, options: dict[str, Any] = None) -> None:
+    def __init__(self, hass: HomeAssistant, config: dict[str, Any], entry_id: str, options: MappingProxyType[str, Any] = MappingProxyType({})) -> None:
         """Initialize the thermostat."""
         self.hass = hass
         self._entry_id = entry_id
@@ -96,9 +101,8 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._attr_min_temp = options.get(CONF_MIN_TEMP, config.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP))
         self._attr_max_temp = options.get(CONF_MAX_TEMP, config.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP))
         self._attr_target_temperature = options.get(CONF_TARGET_TEMP, config.get(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP))
-        self._attr_target_temperature_high = 76
-        self._attr_target_temperature_low = 72
-
+        self._attr_target_temperature_low = options.get(CONF_TARGET_TEMP_LOW, config.get(CONF_TARGET_TEMP_LOW, DEFAULT_TARGET_TEMP_LOW))
+        self._attr_target_temperature_high = options.get(CONF_TARGET_TEMP_HIGH, config.get(CONF_TARGET_TEMP_HIGH, DEFAULT_TARGET_TEMP_HIGH))
         self._attr_precision = DEFAULT_PRECISION
         
         # Set initial HVAC mode
@@ -236,13 +240,13 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
     def _async_update_humidity(self, state) -> None:
         """Update thermostat with latest state from humidity sensor."""
         try:
-            if state is None:
+            if state is None and self._humidity_sensor_entity_id is not None:
                 state = self.hass.states.get(self._humidity_sensor_entity_id)
 
             if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
                 return
 
-            cur_humidity = float(state.state)
+            cur_humidity = int(float(state.state))
             self._cur_humidity = cur_humidity
             self._attr_current_humidity = cur_humidity
         except (ValueError, AttributeError) as ex:
@@ -254,7 +258,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
     def _async_update_main_thermostat_state(self, state) -> None:
         """Update thermostat action based on main thermostat state."""
         try:
-            if state is None:
+            if state is None and self._main_thermostat_entity_id is not None:
                 state = self.hass.states.get(self._main_thermostat_entity_id)
 
             if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
@@ -386,6 +390,8 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
     async def _async_control_based_on_main_thermostat(self) -> None:
         """Control actuator based on main thermostat state and our temperature."""
         try:
+            if self._main_thermostat_entity_id is None: 
+                return;
             main_state = self.hass.states.get(self._main_thermostat_entity_id)
             if main_state is None:
                 _LOGGER.warning("Main thermostat %s not found", self._main_thermostat_entity_id)

@@ -402,7 +402,8 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             
             # Deciding based on the low/high target temp and main thermostat current state
             # and our temperature to know if actuator needs to be closed or not
-            should_deactivate = False
+            enough_cold = False
+            enough_heat = False
             
             if self._attr_hvac_mode in [HVACMode.AUTO, HVACMode.HEAT_COOL]:
                 if main_mode == HVACMode.COOL:

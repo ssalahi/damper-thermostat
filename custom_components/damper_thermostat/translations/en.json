@@ -12,15 +12,29 @@
           "main_thermostat": "Main Thermostat (Optional)",
           "cold_tolerance": "Cold Tolerance",
           "hot_tolerance": "Hot Tolerance",
+          "cold_tolerance_auto": "Cold Tolerance (Auto Mode)",
+          "hot_tolerance_auto": "Hot Tolerance (Auto Mode)",
           "min_temp": "Minimum Temperature",
           "max_temp": "Maximum Temperature",
           "target_temp": "Initial Target Temperature",
+          "target_temp_low": "Target Temperature Low",
+          "target_temp_high": "Target Temperature High",
           "initial_hvac_mode": "Initial HVAC Mode"
         }
       }
     },
     "error": {
-      "entity_not_found": "Entity not found"
+      "entity_not_found": "Entity not found",
+      "invalid_name": "Invalid name provided",
+      "already_configured": "Device is already configured",
+      "min_temp_must_be_less_than_max_temp": "Minimum temperature must be less than maximum temperature",
+      "target_temp_out_of_range": "Target temperature must be within min/max range",
+      "temp_low_must_be_less_than_temp_high": "Low temperature must be less than high temperature",
+      "temp_range_out_of_bounds": "Temperature range must be within min/max bounds"
+    },
+    "abort": {
+      "already_configured": "Device is already configured",
+      "user_cancelled": "Configuration cancelled by user"
     }
   },
   "options": {
@@ -36,12 +50,16 @@
           "main_thermostat": "Main Thermostat (Optional)",
           "cold_tolerance": "Cold Tolerance",
           "hot_tolerance": "Hot Tolerance",
+          "cold_tolerance_auto": "Cold Tolerance (Auto Mode)",
+          "hot_tolerance_auto": "Hot Tolerance (Auto Mode)",
           "min_temp": "Minimum Temperature",
-          "max_temp": "Maximum Temperature",
-          "target_temp": "Target Temperature",
-          "initial_hvac_mode": "HVAC Mode"
+          "max_temp": "Maximum Temperature"
         }
       }
+    },
+    "error": {
+      "entity_not_found": "Entity not found",
+      "min_temp_must_be_less_than_max_temp": "Minimum temperature must be less than maximum temperature"
     }
   }
 }

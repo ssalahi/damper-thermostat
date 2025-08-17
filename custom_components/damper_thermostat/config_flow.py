@@ -33,7 +33,8 @@ from .const import (
     DEFAULT_MAX_TEMP,
     DEFAULT_TARGET_TEMP,
     DEFAULT_TARGET_TEMP_LOW,
-    DEFAULT_TARGET_TEMP_HIGH
+    DEFAULT_TARGET_TEMP_HIGH,
+    DEFAULT_PRECISION
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -85,10 +86,11 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 )
 
 
-class FlowHandler(ConfigFlow, domain=DOMAIN):
+class DamperThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Damper Thermostat."""
 
     VERSION = 1
+    MINOR_VERSION = 1
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -125,20 +127,45 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         if user_input.get(CONF_MAIN_THERMOSTAT) and not self.hass.states.get(user_input[CONF_MAIN_THERMOSTAT]):
             errors[CONF_MAIN_THERMOSTAT] = "entity_not_found"
 
+        # Validate temperature ranges
+        min_temp = user_input.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
+        max_temp = user_input.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
+        target_temp = user_input.get(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP)
+        target_temp_low = user_input.get(CONF_TARGET_TEMP_LOW, DEFAULT_TARGET_TEMP_LOW)
+        target_temp_high = user_input.get(CONF_TARGET_TEMP_HIGH, DEFAULT_TARGET_TEMP_HIGH)
+
+        if min_temp >= max_temp:
+            errors[CONF_MIN_TEMP] = "min_temp_must_be_less_than_max_temp"
+        
+        if target_temp < min_temp or target_temp > max_temp:
+            errors[CONF_TARGET_TEMP] = "target_temp_out_of_range"
+        
+        if target_temp_low >= target_temp_high:
+            errors[CONF_TARGET_TEMP_LOW] = "temp_low_must_be_less_than_temp_high"
+        
+        if target_temp_low < min_temp or target_temp_high > max_temp:
+            errors[CONF_TARGET_TEMP_LOW] = "temp_range_out_of_bounds"
+
         if errors:
             return self.async_show_form(
                 step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
             )
 
+        # Create a unique ID based on the name to prevent duplicate entries
+        unique_id = f"{user_input[CONF_NAME]}_{DOMAIN}"
+        await self.async_set_unique_id(unique_id)
+        self._abort_if_unique_id_configured()
+
         return self.async_create_entry(title=user_input[CONF_NAME], data=user_input)
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry: ConfigEntry):
-        return OptionsFlowHandler()
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Get the options flow for this handler."""
+        return DamperThermostatOptionsFlow()
 
 
-class OptionsFlowHandler(OptionsFlow):
+class DamperThermostatOptionsFlow(OptionsFlow):
     """Handle options flow for Damper Thermostat."""
 
     def __init__(self) -> None:
@@ -175,6 +202,13 @@ class OptionsFlowHandler(OptionsFlow):
                 
             if user_input.get(CONF_MAIN_THERMOSTAT) and not self.hass.states.get(user_input[CONF_MAIN_THERMOSTAT]):
                 errors[CONF_MAIN_THERMOSTAT] = "entity_not_found"
+
+            # Validate temperature ranges
+            min_temp = user_input.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
+            max_temp = user_input.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
+
+            if min_temp >= max_temp:
+                errors[CONF_MIN_TEMP] = "min_temp_must_be_less_than_max_temp"
 
             if errors:
                 return self.async_show_form(

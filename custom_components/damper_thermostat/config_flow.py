@@ -19,6 +19,8 @@ from .const import (
     CONF_TEMPERATURE_SENSOR,
     CONF_HUMIDITY_SENSOR,
     CONF_ACTUATOR_SWITCH,
+    CONF_ACTUATOR_SWITCHES,
+    CONF_MAX_SWITCHES_OFF,
     CONF_MAIN_THERMOSTAT,
     CONF_COLD_TOLERANCE,
     CONF_HOT_TOLERANCE,
@@ -34,7 +36,8 @@ from .const import (
     DEFAULT_TARGET_TEMP,
     DEFAULT_TARGET_TEMP_LOW,
     DEFAULT_TARGET_TEMP_HIGH,
-    DEFAULT_PRECISION
+    DEFAULT_PRECISION,
+    DEFAULT_MAX_SWITCHES_OFF,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -57,6 +60,15 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         ),
         vol.Optional(CONF_MAIN_THERMOSTAT): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="climate")
+        ),
+        vol.Required(CONF_ACTUATOR_SWITCHES): selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="switch",
+                multiple=True
+            )
+        ),
+        vol.Optional(CONF_MAX_SWITCHES_OFF, default=DEFAULT_MAX_SWITCHES_OFF): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=10)
         ),
         vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): vol.All(
             vol.Coerce(float), vol.Range(min=0.1, max=10.0)
@@ -123,6 +135,16 @@ class DamperThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
             
         if not self.hass.states.get(user_input[CONF_ACTUATOR_SWITCH]):
             errors[CONF_ACTUATOR_SWITCH] = "entity_not_found"
+            
+        # Validate actuator switches list
+        actuator_switches = user_input[CONF_ACTUATOR_SWITCHES]
+        if isinstance(actuator_switches, list):
+            for switch in actuator_switches:
+                if not self.hass.states.get(switch):
+                    errors[CONF_ACTUATOR_SWITCHES] = "entity_not_found"
+                    break
+        else:
+            errors[CONF_ACTUATOR_SWITCHES] = "entity_not_found"
             
         if user_input.get(CONF_MAIN_THERMOSTAT) and not self.hass.states.get(user_input[CONF_MAIN_THERMOSTAT]):
             errors[CONF_MAIN_THERMOSTAT] = "entity_not_found"
@@ -200,6 +222,16 @@ class DamperThermostatOptionsFlow(OptionsFlow):
             if not self.hass.states.get(user_input[CONF_ACTUATOR_SWITCH]):
                 errors[CONF_ACTUATOR_SWITCH] = "entity_not_found"
                 
+            # Validate actuator switches list
+            actuator_switches = user_input[CONF_ACTUATOR_SWITCHES]
+            if isinstance(actuator_switches, list):
+                for switch in actuator_switches:
+                    if not self.hass.states.get(switch):
+                        errors[CONF_ACTUATOR_SWITCHES] = "entity_not_found"
+                        break
+            else:
+                errors[CONF_ACTUATOR_SWITCHES] = "entity_not_found"
+                
             if user_input.get(CONF_MAIN_THERMOSTAT) and not self.hass.states.get(user_input[CONF_MAIN_THERMOSTAT]):
                 errors[CONF_MAIN_THERMOSTAT] = "entity_not_found"
 
@@ -274,6 +306,19 @@ class DamperThermostatOptionsFlow(OptionsFlow):
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="switch")
                 ),
+                vol.Required(
+                    CONF_ACTUATOR_SWITCHES,
+                    default=get_current_value(CONF_ACTUATOR_SWITCHES, [])
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="switch",
+                        multiple=True
+                    )
+                ),
+                vol.Optional(
+                    CONF_MAX_SWITCHES_OFF,
+                    default=get_current_value(CONF_MAX_SWITCHES_OFF, DEFAULT_MAX_SWITCHES_OFF)
+                ): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
                 vol.Optional(
                     CONF_MAIN_THERMOSTAT,
                     default=get_current_value(CONF_MAIN_THERMOSTAT, "")

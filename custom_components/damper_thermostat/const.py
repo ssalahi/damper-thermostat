@@ -10,6 +10,8 @@ DOMAIN = "damper_thermostat"
 CONF_TEMPERATURE_SENSOR = "temperature_sensor"
 CONF_HUMIDITY_SENSOR = "humidity_sensor"
 CONF_ACTUATOR_SWITCH = "actuator_switch"
+CONF_ACTUATOR_SWITCHES = "actuator_switches"
+CONF_MAX_SWITCHES_OFF = "max_switches_off"
 CONF_MAIN_THERMOSTAT = "main_thermostat"
 CONF_COLD_TOLERANCE = "cold_tolerance"
 CONF_HOT_TOLERANCE = "hot_tolerance"
@@ -28,6 +30,7 @@ DEFAULT_TARGET_TEMP = 74
 DEFAULT_TARGET_TEMP_LOW = 72
 DEFAULT_TARGET_TEMP_HIGH = 76
 DEFAULT_PRECISION = 0.1
+DEFAULT_MAX_SWITCHES_OFF = 3
 
 # Supported features
 SUPPORT_FLAGS = (

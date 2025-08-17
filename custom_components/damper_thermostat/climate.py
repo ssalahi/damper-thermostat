@@ -34,6 +34,8 @@ from .const import (
     CONF_TEMPERATURE_SENSOR,
     CONF_HUMIDITY_SENSOR,
     CONF_ACTUATOR_SWITCH,
+    CONF_ACTUATOR_SWITCHES,
+    CONF_MAX_SWITCHES_OFF,
     CONF_MAIN_THERMOSTAT,
     CONF_COLD_TOLERANCE,
     CONF_HOT_TOLERANCE,
@@ -50,6 +52,7 @@ from .const import (
     DEFAULT_TARGET_TEMP_LOW,
     DEFAULT_TARGET_TEMP_HIGH,
     DEFAULT_PRECISION,
+    DEFAULT_MAX_SWITCHES_OFF,
     HVAC_MODES,
 )
 
@@ -93,6 +96,17 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             
         self._humidity_sensor_entity_id = options.get(CONF_HUMIDITY_SENSOR, config.get(CONF_HUMIDITY_SENSOR))
         self._actuator_switch_entity_id = options.get(CONF_ACTUATOR_SWITCH, config[CONF_ACTUATOR_SWITCH])
+        
+        # Handle actuator switches list (can be changed via options)
+        actuator_switches = options.get(CONF_ACTUATOR_SWITCHES, config.get(CONF_ACTUATOR_SWITCHES, []))
+        if isinstance(actuator_switches, list):
+            self._actuator_switches_entity_ids = actuator_switches
+        else:
+            self._actuator_switches_entity_ids = [actuator_switches] if actuator_switches else []
+        
+        # Max switches off limit
+        self._max_switches_off = options.get(CONF_MAX_SWITCHES_OFF, config.get(CONF_MAX_SWITCHES_OFF, DEFAULT_MAX_SWITCHES_OFF))
+        
         self._main_thermostat_entity_id = options.get(CONF_MAIN_THERMOSTAT, config.get(CONF_MAIN_THERMOSTAT))
         
         # Other configuration options
@@ -361,28 +375,28 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             current_device_active = await self._async_is_device_active()
             if current_device_active:
                 if self._attr_hvac_mode == HVACMode.HEAT and not too_cold:
-                    _LOGGER.info("Turning off heater %s", self._actuator_switch_entity_id)
+                    _LOGGER.info("Turning off heater - temperature control")
                     await self._async_actuator_turn_off()
                 elif self._attr_hvac_mode == HVACMode.COOL and not too_hot:
-                    _LOGGER.info("Turning off cooler %s", self._actuator_switch_entity_id)
+                    _LOGGER.info("Turning off cooler - temperature control")
                     await self._async_actuator_turn_off()
                 elif self._attr_hvac_mode == HVACMode.AUTO:
                     if not too_cold and not too_hot:
-                        _LOGGER.info("Turning off actuator %s", self._actuator_switch_entity_id)
+                        _LOGGER.info("Turning off actuator - temperature control (auto mode)")
                         await self._async_actuator_turn_off()
             else:
                 if self._attr_hvac_mode == HVACMode.HEAT and too_cold:
-                    _LOGGER.info("Turning on heater %s", self._actuator_switch_entity_id)
+                    _LOGGER.info("Turning on heater - temperature control")
                     await self._async_actuator_turn_on()
                 elif self._attr_hvac_mode == HVACMode.COOL and too_hot:
-                    _LOGGER.info("Turning on cooler %s", self._actuator_switch_entity_id)
+                    _LOGGER.info("Turning on cooler - temperature control")
                     await self._async_actuator_turn_on()
                 elif self._attr_hvac_mode == HVACMode.AUTO:
                     if too_cold:
-                        _LOGGER.info("Turning on heater (auto) %s", self._actuator_switch_entity_id)
+                        _LOGGER.info("Turning on heater (auto) - temperature control")
                         await self._async_actuator_turn_on()
                     elif too_hot:
-                        _LOGGER.info("Turning on cooler (auto) %s", self._actuator_switch_entity_id)
+                        _LOGGER.info("Turning on cooler (auto) - temperature control")
                         await self._async_actuator_turn_on()
         except Exception as ex:
             _LOGGER.error("Error in temperature-based control: %s", ex)
@@ -422,10 +436,10 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
                             
             current_device_active = await self._async_is_device_active()
             if should_deactivate and current_device_active:
-                _LOGGER.info("Conditions not met, turning off actuator %s", self._actuator_switch_entity_id)                
+                _LOGGER.info("Conditions not met, turning off actuator - main thermostat control")                
                 await self._async_actuator_turn_off()
             elif not should_deactivate and not current_device_active:
-                _LOGGER.info("Main thermostat active, turning on actuator %s", self._actuator_switch_entity_id)
+                _LOGGER.info("Main thermostat active, turning on actuator - main thermostat control")
                 await self._async_actuator_turn_on()
         except Exception as ex:
             _LOGGER.error("Error in main thermostat control: %s", ex)
@@ -439,24 +453,102 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             _LOGGER.error("Error checking device state: %s", ex)
             return False
 
+    async def _async_count_actuator_switches_off(self) -> int:
+        """Count how many actuator switches are currently off."""
+        try:
+            count = 0
+            for switch_id in self._actuator_switches_entity_ids:
+                state = self.hass.states.get(switch_id)
+                if state is not None and state.state == "off":
+                    count += 1
+            return count
+        except Exception as ex:
+            _LOGGER.error("Error counting actuator switches off: %s", ex)
+            return 0
+
+    async def _async_get_actuator_switches_status(self) -> dict[str, str]:
+        """Get the current status of all actuator switches."""
+        try:
+            status = {}
+            for switch_id in self._actuator_switches_entity_ids:
+                state = self.hass.states.get(switch_id)
+                if state is not None:
+                    status[switch_id] = state.state
+                else:
+                    status[switch_id] = "unavailable"
+            return status
+        except Exception as ex:
+            _LOGGER.error("Error getting actuator switches status: %s", ex)
+            return {}
+
     async def _async_actuator_turn_on(self) -> None:
         """Turn actuator on."""
         try:
             data = {"entity_id": self._actuator_switch_entity_id}
             self._on_by_us = True
             await self.hass.services.async_call("switch", SERVICE_TURN_ON, data, blocking=False)
+            _LOGGER.info("Turned on my actuator switch %s", self._actuator_switch_entity_id)
         except Exception as ex:
-            _LOGGER.error("Error turning on actuator %s: %s", self._actuator_switch_entity_id, ex)
+            _LOGGER.error("Error turning on actuator: %s", ex)
             self._on_by_us = False
 
     async def _async_actuator_turn_off(self) -> None:
         """Turn actuator off."""
         try:
+            # Check if we can turn off more switches
+            current_off_count = await self._async_count_actuator_switches_off()
+            if current_off_count >= self._max_switches_off:
+                _LOGGER.info(
+                    "Cannot turn off actuator: maximum switches off limit reached (%d/%d)",
+                    current_off_count,
+                    self._max_switches_off
+                )
+                return
+            
+            # Find my position in the priority list
+            my_position = -1
+            for i, switch_id in enumerate(self._actuator_switches_entity_ids):
+                if switch_id == self._actuator_switch_entity_id:
+                    my_position = i
+                    break
+            
+            if my_position == -1:
+                _LOGGER.error("My actuator switch %s not found in actuator_switches list", self._actuator_switch_entity_id)
+                return
+            
+            # Look for a lower priority switch that's currently off to turn ON first
+            lower_priority_switch_to_turn_on = None
+            for i in range(my_position + 1, len(self._actuator_switches_entity_ids)):
+                switch_id = self._actuator_switches_entity_ids[i]
+                state = self.hass.states.get(switch_id)
+                if state is not None and state.state == "off":
+                    lower_priority_switch_to_turn_on = switch_id
+                    break
+            
+            # If no lower priority switch is available to turn on, don't turn off
+            if lower_priority_switch_to_turn_on is None:
+                _LOGGER.info(
+                    "Cannot turn off actuator %s: no lower priority switch available to turn on",
+                    self._actuator_switch_entity_id
+                )
+                return
+            
+            # Turn ON the lower priority switch first
+            data = {"entity_id": lower_priority_switch_to_turn_on}
+            await self.hass.services.async_call("switch", SERVICE_TURN_ON, data, blocking=False)
+            
+            # Now turn OFF my own switch
             data = {"entity_id": self._actuator_switch_entity_id}
             self._on_by_us = True
             await self.hass.services.async_call("switch", SERVICE_TURN_OFF, data, blocking=False)
+            _LOGGER.info(
+                "Turned off my actuator switch %s after turning on lower priority switch (switches off: %d/%d)",
+                self._actuator_switch_entity_id,
+                current_off_count,
+                self._max_switches_off
+            )
         except Exception as ex:
-            _LOGGER.error("Error turning off actuator %s: %s", self._actuator_switch_entity_id, ex)
+            _LOGGER.error("Error turning off actuator: %s", ex)
             self._on_by_us = False
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
@@ -529,3 +621,27 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             model="Smart Damper Thermostat",
             sw_version="1.0.0"
         )
+
+    @property
+    def actuator_switches_status(self) -> dict[str, str]:
+        """Return the current status of all actuator switches."""
+        try:
+            status = {}
+            for switch_id in self._actuator_switches_entity_ids:
+                state = self.hass.states.get(switch_id)
+                if state is not None:
+                    status[switch_id] = state.state
+                else:
+                    status[switch_id] = "unavailable"
+            return status
+        except Exception:
+            return {}
+
+    @property
+    def actuator_switches_config(self) -> dict[str, Any]:
+        """Return the current actuator switches configuration."""
+        return {
+            "actuator_switches": self._actuator_switches_entity_ids,
+            "max_switches_off": self._max_switches_off,
+            "current_off_count": len([s for s in self.actuator_switches_status.values() if s == "off"])
+        }

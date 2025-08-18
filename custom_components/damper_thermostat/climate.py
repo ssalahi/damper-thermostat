@@ -121,6 +121,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._attr_target_temperature_low = options.get(CONF_TARGET_TEMP_LOW, config.get(CONF_TARGET_TEMP_LOW, DEFAULT_TARGET_TEMP_LOW))
         self._attr_target_temperature_high = options.get(CONF_TARGET_TEMP_HIGH, config.get(CONF_TARGET_TEMP_HIGH, DEFAULT_TARGET_TEMP_HIGH))
         self._attr_precision = DEFAULT_PRECISION
+        self._attr_target_temperature_step = DEFAULT_PRECISION
         
         # Set initial HVAC mode
         self._attr_hvac_mode = options.get(CONF_INITIAL_HVAC_MODE, config.get(CONF_INITIAL_HVAC_MODE, HVACMode.OFF))
@@ -577,17 +578,6 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         if target_temp_high is not None:
             self._attr_target_temperature_high = target_temp_high
         
-        # Validate that low temperature is not higher than high temperature
-        if (target_temp_low is not None and target_temp_high is not None and 
-            target_temp_low > target_temp_high):
-            _LOGGER.warning(
-                "Invalid temperature range: low (%s) > high (%s). Swapping values.",
-                target_temp_low, target_temp_high
-            )
-            self._attr_target_temperature_low, self._attr_target_temperature_high = (
-                self._attr_target_temperature_high, self._attr_target_temperature_low
-            )
-        
         # Only proceed if we actually got a temperature to set
         if any(temp is not None for temp in [temperature, target_temp_low, target_temp_high]):
             await self._async_control_heating_cooling()
@@ -599,6 +589,27 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         if task.exception():
             _LOGGER.error("Control task failed: %s", task.exception())
     
+    @property
+    def target_temperature(self) -> float | None:
+        """Return the temperature we try to reach."""
+        if self.hvac_mode in [HVACMode.COOL, HVACMode.HEAT, HVACMode.OFF]:
+            return self._attr_target_temperature
+        return None
+
+    @property
+    def target_temperature_high(self) -> float | None:
+        """Return the highbound target temperature we try to reach."""
+        if self.hvac_mode in [HVACMode.HEAT_COOL, HVACMode.AUTO]:
+            return self._attr_target_temperature_high
+        return None
+
+    @property
+    def target_temperature_low(self) -> float | None:
+        """Return the lowbound target temperature we try to reach."""
+        if self.hvac_mode in [HVACMode.HEAT_COOL, HVACMode.AUTO]:
+            return self._attr_target_temperature_low
+        return None
+
     @property
     def icon(self):
         """Return the icon based on current HVAC state."""

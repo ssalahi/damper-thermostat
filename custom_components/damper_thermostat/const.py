@@ -4,6 +4,10 @@ from homeassistant.components.climate.const import (
     ClimateEntityFeature,
 )
 
+from homeassistant.const import (
+    PRECISION_TENTHS
+)
+
 DOMAIN = "damper_thermostat"
 
 # Configuration keys
@@ -29,7 +33,7 @@ DEFAULT_MAX_TEMP = 80
 DEFAULT_TARGET_TEMP = 74
 DEFAULT_TARGET_TEMP_LOW = 72
 DEFAULT_TARGET_TEMP_HIGH = 76
-DEFAULT_PRECISION = 0.1
+DEFAULT_PRECISION = PRECISION_TENTHS
 DEFAULT_MAX_SWITCHES_OFF = 3
 
 # Supported features

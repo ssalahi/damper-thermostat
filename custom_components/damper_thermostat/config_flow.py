@@ -10,7 +10,6 @@ from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
 from homeassistant.components.climate.const import HVACMode
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
 
@@ -55,11 +54,11 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_HUMIDITY_SENSOR): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
         ),
-        vol.Required(CONF_ACTUATOR_SWITCH): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="switch")
-        ),
         vol.Optional(CONF_MAIN_THERMOSTAT): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="climate")
+        ),
+        vol.Required(CONF_ACTUATOR_SWITCH): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="switch")
         ),
         vol.Required(CONF_ACTUATOR_SWITCHES): selector.EntitySelector(
             selector.EntitySelectorConfig(
@@ -92,7 +91,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
             vol.Coerce(float), vol.Range(min=70, max=90)
         ),
         vol.Optional(CONF_INITIAL_HVAC_MODE, default=HVACMode.AUTO): vol.In(
-            [HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.OFF]
+            [HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.HEAT_COOL, HVACMode.OFF]
         ),
     }
 )
@@ -106,7 +105,7 @@ class DamperThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ):
         """Handle the initial step."""
         if user_input is None:
             return self.async_show_form(
@@ -194,8 +193,7 @@ class DamperThermostatOptionsFlow(OptionsFlow):
         """Initialize options flow."""
 
     async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+        self, user_input: dict[str, Any] | None = None):
         """Manage the options."""
         if user_input is not None:
             # Validate that entities exist
@@ -300,6 +298,12 @@ class DamperThermostatOptionsFlow(OptionsFlow):
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
                 ),
+                vol.Optional(
+                    CONF_MAIN_THERMOSTAT,
+                    default=get_current_value(CONF_MAIN_THERMOSTAT, "")
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="climate")
+                ),
                 vol.Required(
                     CONF_ACTUATOR_SWITCH,
                     default=get_current_value(CONF_ACTUATOR_SWITCH, "")
@@ -319,12 +323,6 @@ class DamperThermostatOptionsFlow(OptionsFlow):
                     CONF_MAX_SWITCHES_OFF,
                     default=get_current_value(CONF_MAX_SWITCHES_OFF, DEFAULT_MAX_SWITCHES_OFF)
                 ): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
-                vol.Optional(
-                    CONF_MAIN_THERMOSTAT,
-                    default=get_current_value(CONF_MAIN_THERMOSTAT, "")
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="climate")
-                ),
                 vol.Optional(
                     CONF_COLD_TOLERANCE, 
                     default=get_current_value(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)

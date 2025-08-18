@@ -280,17 +280,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
 
             # Map main thermostat's hvac_action to our hvac_action
             main_action = state.attributes.get("hvac_action", HVACAction.OFF) if state.attributes else HVACAction.OFF
-            
-            if main_action == HVACAction.HEATING:
-                self._attr_hvac_action = HVACAction.HEATING
-            elif main_action == HVACAction.COOLING:
-                self._attr_hvac_action = HVACAction.COOLING
-            elif main_action == HVACAction.FAN:
-                self._attr_hvac_action = HVACAction.FAN
-            elif main_action == HVACAction.IDLE:
-                self._attr_hvac_action = HVACAction.IDLE
-            else:
-                self._attr_hvac_action = HVACAction.OFF
+            self._attr_hvac_action = main_action
         except Exception as ex:
             _LOGGER.error("Error updating main thermostat state: %s", ex)
             self._attr_hvac_action = HVACAction.OFF
@@ -416,9 +406,17 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             
             # Deciding based on the low/high target temp and main thermostat current state
             # and our temperature to know if actuator needs to be closed or not
+            should_deactivate = False
             enough_cold = False
             enough_heat = False
             
+            # The heat/cool is opposite of each other, so we need to deactivate
+            if self._attr_hvac_mode == HVACMode.COOL and main_mode == HVACMode.HEAT:
+                should_deactivate = True
+            if self._attr_hvac_mode == HVACMode.HEAT and main_mode == HVACMode.COOL:
+                should_deactivate = True
+
+            # Handle auto and heat_cool modes
             if self._attr_hvac_mode in [HVACMode.AUTO, HVACMode.HEAT_COOL]:
                 if main_mode == HVACMode.COOL:
                     enough_cold = self._attr_target_temperature_low >= (self._cur_temp + self._cold_tolerance)
@@ -426,13 +424,13 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
                     enough_heat = self._attr_target_temperature_high <= (self._cur_temp - self._hot_tolerance)
                 should_deactivate = enough_cold or enough_heat
             
+            # Handle heat and cool modes
             if self._attr_hvac_mode == HVACMode.COOL and main_action == HVACAction.COOLING:
                 enough_cold = self._attr_target_temperature >= (self._cur_temp + self._cold_tolerance)
-            
             if self._attr_hvac_mode == HVACMode.HEAT and main_action in [HVACAction.HEATING, HVACAction.PREHEATING]:
                 enough_heat = self._attr_target_temperature <= (self._cur_temp - self._hot_tolerance)
 
-            should_deactivate = enough_cold or enough_heat
+            should_deactivate = should_deactivate or enough_cold or enough_heat
                             
             current_device_active = await self._async_is_device_active()
             if should_deactivate and current_device_active:
@@ -452,19 +450,6 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         except Exception as ex:
             _LOGGER.error("Error checking device state: %s", ex)
             return False
-
-    async def _async_count_actuator_switches_off(self) -> int:
-        """Count how many actuator switches are currently off."""
-        try:
-            count = 0
-            for switch_id in self._actuator_switches_entity_ids:
-                state = self.hass.states.get(switch_id)
-                if state is not None and state.state == "off":
-                    count += 1
-            return count
-        except Exception as ex:
-            _LOGGER.error("Error counting actuator switches off: %s", ex)
-            return 0
 
     async def _async_get_actuator_switches_status(self) -> dict[str, str]:
         """Get the current status of all actuator switches."""
@@ -496,23 +481,22 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         """Turn actuator off."""
         try:
             # Check if we can turn off more switches
-            current_off_count = await self._async_count_actuator_switches_off()
-            if current_off_count >= self._max_switches_off:
+            switches_status = await self._async_get_actuator_switches_status()
+            current_off_count = sum(1 for status in switches_status.values() if status == "off")
+            if current_off_count < self._max_switches_off:
+                data = {"entity_id": self._actuator_switch_entity_id}
+                self._on_by_us = True
+                await self.hass.services.async_call("switch", SERVICE_TURN_OFF, data, blocking=False)
                 _LOGGER.info(
-                    "Cannot turn off actuator: maximum switches off limit reached (%d/%d)",
-                    current_off_count,
-                    self._max_switches_off
+                    "Turned off my actuator switch %s.",
+                    self._actuator_switch_entity_id
                 )
                 return
             
             # Find my position in the priority list
-            my_position = -1
-            for i, switch_id in enumerate(self._actuator_switches_entity_ids):
-                if switch_id == self._actuator_switch_entity_id:
-                    my_position = i
-                    break
-            
-            if my_position == -1:
+            try:
+                my_position = self._actuator_switches_entity_ids.index(self._actuator_switch_entity_id)
+            except ValueError:
                 _LOGGER.error("My actuator switch %s not found in actuator_switches list", self._actuator_switch_entity_id)
                 return
             
@@ -520,8 +504,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             lower_priority_switch_to_turn_on = None
             for i in range(my_position + 1, len(self._actuator_switches_entity_ids)):
                 switch_id = self._actuator_switches_entity_ids[i]
-                state = self.hass.states.get(switch_id)
-                if state is not None and state.state == "off":
+                if switches_status.get(switch_id) == "off":
                     lower_priority_switch_to_turn_on = switch_id
                     break
             
@@ -561,6 +544,9 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             await self._async_control_heating_cooling()
         elif hvac_mode == HVACMode.AUTO:
             self._attr_hvac_mode = HVACMode.AUTO
+            await self._async_control_heating_cooling()
+        elif hvac_mode == HVACMode.HEAT_COOL:
+            self._attr_hvac_mode = HVACMode.HEAT_COOL
             await self._async_control_heating_cooling()
         elif hvac_mode == HVACMode.OFF:
             self._attr_hvac_mode = HVACMode.OFF
@@ -621,27 +607,3 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             model="Smart Damper Thermostat",
             sw_version="1.0.0"
         )
-
-    @property
-    def actuator_switches_status(self) -> dict[str, str]:
-        """Return the current status of all actuator switches."""
-        try:
-            status = {}
-            for switch_id in self._actuator_switches_entity_ids:
-                state = self.hass.states.get(switch_id)
-                if state is not None:
-                    status[switch_id] = state.state
-                else:
-                    status[switch_id] = "unavailable"
-            return status
-        except Exception:
-            return {}
-
-    @property
-    def actuator_switches_config(self) -> dict[str, Any]:
-        """Return the current actuator switches configuration."""
-        return {
-            "actuator_switches": self._actuator_switches_entity_ids,
-            "max_switches_off": self._max_switches_off,
-            "current_off_count": len([s for s in self.actuator_switches_status.values() if s == "off"])
-        }

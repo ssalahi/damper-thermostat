@@ -43,5 +43,6 @@ HVAC_MODES = [
     HVACMode.HEAT,
     HVACMode.COOL,
     HVACMode.AUTO,
+    HVACMode.HEAT_COOL,
     HVACMode.OFF,
 ]

@@ -11,6 +11,8 @@ from homeassistant.components.climate.const import (
     ClimateEntityFeature,
     HVACAction,
     HVACMode,
+    ATTR_TARGET_TEMP_HIGH,
+    ATTR_TARGET_TEMP_LOW,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -54,6 +56,7 @@ from .const import (
     DEFAULT_PRECISION,
     DEFAULT_MAX_SWITCHES_OFF,
     HVAC_MODES,
+    SUPPORT_FLAGS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -129,7 +132,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._attr_temperature_unit = UnitOfTemperature.FAHRENHEIT
         
         # Supported features and modes
-        self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
+        self._attr_supported_features = SUPPORT_FLAGS
             
         self._attr_hvac_modes = HVAC_MODES
         
@@ -566,11 +569,11 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             self._attr_target_temperature = temperature
         
         # Handle dual temperature setpoints for AUTO and HEAT_COOL modes
-        target_temp_low = kwargs.get("target_temp_low")
+        target_temp_low = kwargs.get(ATTR_TARGET_TEMP_LOW)
         if target_temp_low is not None:
             self._attr_target_temperature_low = target_temp_low
         
-        target_temp_high = kwargs.get("target_temp_high")
+        target_temp_high = kwargs.get(ATTR_TARGET_TEMP_HIGH)
         if target_temp_high is not None:
             self._attr_target_temperature_high = target_temp_high
         

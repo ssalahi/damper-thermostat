@@ -426,14 +426,13 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
                     enough_cold = self._attr_target_temperature_low >= (self._cur_temp + self._cold_tolerance)
                 if main_mode == HVACMode.HEAT:
                     enough_heat = self._attr_target_temperature_high <= (self._cur_temp - self._hot_tolerance)
-                should_deactivate = enough_cold or enough_heat
+            should_deactivate = should_deactivate or enough_cold or enough_heat
             
             # Handle heat and cool modes
             if self._attr_hvac_mode == HVACMode.COOL and main_action == HVACAction.COOLING:
                 enough_cold = self._attr_target_temperature >= (self._cur_temp + self._cold_tolerance)
             if self._attr_hvac_mode == HVACMode.HEAT and main_action in [HVACAction.HEATING, HVACAction.PREHEATING]:
                 enough_heat = self._attr_target_temperature <= (self._cur_temp - self._hot_tolerance)
-
             should_deactivate = should_deactivate or enough_cold or enough_heat
                             
             current_device_active = await self._async_is_device_active()
@@ -592,7 +591,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
     @property
     def target_temperature(self) -> float | None:
         """Return the temperature we try to reach."""
-        if self.hvac_mode in [HVACMode.COOL, HVACMode.HEAT, HVACMode.OFF]:
+        if self.hvac_mode in [HVACMode.COOL, HVACMode.HEAT, HVACMode.AUTO]:
             return self._attr_target_temperature
         return None
 

@@ -560,12 +560,35 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature."""
+        # Handle single temperature setpoint
         temperature = kwargs.get(ATTR_TEMPERATURE)
-        if temperature is None:
-            return
-        self._attr_target_temperature = temperature
-        await self._async_control_heating_cooling()
-        self.async_write_ha_state()
+        if temperature is not None:
+            self._attr_target_temperature = temperature
+        
+        # Handle dual temperature setpoints for AUTO and HEAT_COOL modes
+        target_temp_low = kwargs.get("target_temp_low")
+        if target_temp_low is not None:
+            self._attr_target_temperature_low = target_temp_low
+        
+        target_temp_high = kwargs.get("target_temp_high")
+        if target_temp_high is not None:
+            self._attr_target_temperature_high = target_temp_high
+        
+        # Validate that low temperature is not higher than high temperature
+        if (target_temp_low is not None and target_temp_high is not None and 
+            target_temp_low > target_temp_high):
+            _LOGGER.warning(
+                "Invalid temperature range: low (%s) > high (%s). Swapping values.",
+                target_temp_low, target_temp_high
+            )
+            self._attr_target_temperature_low, self._attr_target_temperature_high = (
+                self._attr_target_temperature_high, self._attr_target_temperature_low
+            )
+        
+        # Only proceed if we actually got a temperature to set
+        if any(temp is not None for temp in [temperature, target_temp_low, target_temp_high]):
+            await self._async_control_heating_cooling()
+            self.async_write_ha_state()
 
     @callback
     def _handle_control_task_done(self, task) -> None:

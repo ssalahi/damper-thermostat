@@ -25,7 +25,7 @@ from homeassistant.const import (
     STATE_UNKNOWN,
     UnitOfTemperature,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant, callback, Event, EventStateChangedData
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -143,6 +143,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._cur_humidity = None
         self._temp_lock = asyncio.Lock()
         self._on_by_us = False
+        self._main_thermostat_target_temperature = self._attr_target_temperature
 
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added."""
@@ -283,20 +284,26 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
                 return
 
             # Map main thermostat's hvac_action to our hvac_action
-            main_action = state.attributes.get("hvac_action", HVACAction.OFF) if state.attributes else HVACAction.OFF
+            main_action = HVACAction(state.attributes.get("hvac_action", HVACAction.OFF)) if state.attributes else HVACAction.OFF
             self._attr_hvac_action = main_action
+            # Kepp track of main thermostat's target_temperature
+            self._main_thermostat_target_temperature = float(state.attributes.get("target_temperature", self._attr_target_temperature))
+            
+            # Update the current thermostat's based on the main thermostat change
+            task = self.hass.async_create_task(self._async_control_heating_cooling())
+            task.add_done_callback(self._handle_control_task_done)
         except Exception as ex:
             _LOGGER.error("Error updating main thermostat state: %s", ex)
             self._attr_hvac_action = HVACAction.OFF
 
     @callback
-    def _async_sensor_changed(self, event) -> None:
+    def _async_sensor_changed(self, event: Event[EventStateChangedData]) -> None:
         """Handle temperature/humidity sensor state changes."""
-        new_state = event.data.get("new_state")
+        new_state = event.data["new_state"]
         if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return
 
-        entity_id = event.data.get("entity_id")
+        entity_id = event.data["entity_id"]
         
         if entity_id in self._temperature_sensor_entity_ids:
             self._async_update_temp(new_state)
@@ -309,9 +316,9 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         task.add_done_callback(self._handle_control_task_done)
 
     @callback
-    def _async_main_thermostat_changed(self, event) -> None:
+    def _async_main_thermostat_changed(self, event: Event[EventStateChangedData]) -> None:
         """Handle main thermostat state changes."""
-        new_state = event.data.get("new_state")
+        new_state = event.data["new_state"]
         if new_state is None:
             return
             
@@ -321,9 +328,8 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
     @callback
     def _async_switch_changed(self, event) -> None:
         """Handle actuator switch state changes."""
-        new_state = event.data.get("new_state")
-        old_state = event.data.get("old_state")
-        if new_state is None:
+        new_state = event.data["new_state"]
+        if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return
 
         self.async_write_ha_state()
@@ -399,14 +405,14 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         """Control actuator based on main thermostat state and our temperature."""
         try:
             if self._main_thermostat_entity_id is None: 
-                return;
+                return
             main_state = self.hass.states.get(self._main_thermostat_entity_id)
             if main_state is None:
                 _LOGGER.warning("Main thermostat %s not found", self._main_thermostat_entity_id)
                 return
                 
-            main_action = main_state.attributes.get("hvac_action", HVACAction.OFF)
-            main_mode = main_state.attributes.get("hvac_mode", HVACMode.OFF)
+            main_action = HVACAction(main_state.attributes.get("hvac_action", HVACAction.OFF))
+            main_mode = HVACMode(main_state.state)
             
             # Deciding based on the low/high target temp and main thermostat current state
             # and our temperature to know if actuator needs to be closed or not
@@ -420,8 +426,8 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             if self._attr_hvac_mode == HVACMode.HEAT and main_mode == HVACMode.COOL:
                 should_deactivate = True
 
-            # Handle auto and heat_cool modes
-            if self._attr_hvac_mode in [HVACMode.AUTO, HVACMode.HEAT_COOL]:
+            # Handle heat_cool mode
+            if self._attr_hvac_mode == HVACMode.HEAT_COOL:
                 if main_mode == HVACMode.COOL:
                     enough_cold = self._attr_target_temperature_low >= (self._cur_temp + self._cold_tolerance)
                 if main_mode == HVACMode.HEAT:
@@ -434,7 +440,11 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             if self._attr_hvac_mode == HVACMode.HEAT and main_action in [HVACAction.HEATING, HVACAction.PREHEATING]:
                 enough_heat = self._attr_target_temperature <= (self._cur_temp - self._hot_tolerance)
             should_deactivate = should_deactivate or enough_cold or enough_heat
-                            
+
+            # Auto mode will always keep the actuator on
+            if self._attr_hvac_mode == HVACMode.AUTO:
+                should_deactivate = False
+                 
             current_device_active = await self._async_is_device_active()
             if should_deactivate and current_device_active:
                 _LOGGER.info("Conditions not met, turning off actuator - main thermostat control")                
@@ -539,25 +549,13 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set hvac mode."""
-        if hvac_mode == HVACMode.HEAT:
-            self._attr_hvac_mode = HVACMode.HEAT
-            await self._async_control_heating_cooling()
-        elif hvac_mode == HVACMode.COOL:
-            self._attr_hvac_mode = HVACMode.COOL
-            await self._async_control_heating_cooling()
-        elif hvac_mode == HVACMode.AUTO:
-            self._attr_hvac_mode = HVACMode.AUTO
-            await self._async_control_heating_cooling()
-        elif hvac_mode == HVACMode.HEAT_COOL:
-            self._attr_hvac_mode = HVACMode.HEAT_COOL
-            await self._async_control_heating_cooling()
-        elif hvac_mode == HVACMode.OFF:
+        if hvac_mode == HVACMode.OFF:
             self._attr_hvac_mode = HVACMode.OFF
             if await self._async_is_device_active():
                 await self._async_actuator_turn_off()
         else:
-            _LOGGER.error("Unrecognized hvac mode: %s", hvac_mode)
-            return
+            self._attr_hvac_mode = hvac_mode
+            await self._async_control_heating_cooling()
         # Ensure we update the display
         self.async_write_ha_state()
 
@@ -565,7 +563,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         """Set new target temperature."""
         # Handle single temperature setpoint
         temperature = kwargs.get(ATTR_TEMPERATURE)
-        if temperature is not None:
+        if temperature is not None and (self.hvac_mode is not HVACMode.AUTO or not self._main_thermostat_entity_id):
             self._attr_target_temperature = temperature
         
         # Handle dual temperature setpoints for AUTO and HEAT_COOL modes
@@ -591,21 +589,25 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
     @property
     def target_temperature(self) -> float | None:
         """Return the temperature we try to reach."""
-        if self.hvac_mode in [HVACMode.COOL, HVACMode.HEAT, HVACMode.AUTO]:
+        if self.hvac_mode in [HVACMode.COOL, HVACMode.HEAT]:
             return self._attr_target_temperature
+        elif self.hvac_mode == HVACMode.AUTO: 
+            if not self._main_thermostat_entity_id:
+                return self._attr_target_temperature
+            return self._main_thermostat_target_temperature
         return None
 
     @property
     def target_temperature_high(self) -> float | None:
         """Return the highbound target temperature we try to reach."""
-        if self.hvac_mode in [HVACMode.HEAT_COOL, HVACMode.AUTO]:
+        if self.hvac_mode in [HVACMode.HEAT_COOL]:
             return self._attr_target_temperature_high
         return None
 
     @property
     def target_temperature_low(self) -> float | None:
         """Return the lowbound target temperature we try to reach."""
-        if self.hvac_mode in [HVACMode.HEAT_COOL, HVACMode.AUTO]:
+        if self.hvac_mode in [HVACMode.HEAT_COOL]:
             return self._attr_target_temperature_low
         return None
 
@@ -624,6 +626,8 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
                 return "mdi:thermostat-auto"
             else:
                 return "mdi:thermostat-auto"
+        elif self._attr_hvac_mode == HVACMode.HEAT_COOL:
+            return "mdi:sun-snowflake-variant"
         elif self._attr_hvac_mode == HVACMode.HEAT:
             return "mdi:radiator"
         elif self._attr_hvac_mode == HVACMode.COOL:

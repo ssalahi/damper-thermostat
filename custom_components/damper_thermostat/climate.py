@@ -24,6 +24,7 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
     UnitOfTemperature,
+    PRECISION_HALVES
 )
 from homeassistant.core import HomeAssistant, callback, Event, EventStateChangedData
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -121,7 +122,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._attr_target_temperature_low = options.get(CONF_TARGET_TEMP_LOW, config.get(CONF_TARGET_TEMP_LOW, DEFAULT_TARGET_TEMP_LOW))
         self._attr_target_temperature_high = options.get(CONF_TARGET_TEMP_HIGH, config.get(CONF_TARGET_TEMP_HIGH, DEFAULT_TARGET_TEMP_HIGH))
         self._attr_precision = DEFAULT_PRECISION
-        self._attr_target_temperature_step = DEFAULT_PRECISION
+        self._attr_target_temperature_step = PRECISION_HALVES
         
         # Set initial HVAC mode
         self._attr_hvac_mode = options.get(CONF_INITIAL_HVAC_MODE, config.get(CONF_INITIAL_HVAC_MODE, HVACMode.OFF))
@@ -224,16 +225,13 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         """Update thermostat with average temperature from all temperature sensors."""
         try:
             # Collect temperatures from all sensors
-            temperatures = []
-            valid_sensors = []
-            
+            temperatures = []            
             for sensor_id in self._temperature_sensor_entity_ids:
                 sensor_state = self.hass.states.get(sensor_id)
                 if sensor_state is not None and sensor_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
                     try:
                         temp = float(sensor_state.state)
                         temperatures.append(temp)
-                        valid_sensors.append(sensor_id)
                     except ValueError as ex:
                         _LOGGER.warning("Unable to parse temperature from sensor %s: %s", sensor_id, ex)
             
@@ -245,13 +243,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             avg_temp = sum(temperatures) / len(temperatures)
             self._cur_temp = avg_temp
             self._attr_current_temperature = avg_temp
-            
-            _LOGGER.debug(
-                "Updated temperature: average %.2f°F from %d sensors (%s)",
-                avg_temp,
-                len(temperatures),
-                ", ".join([f"{sensor}: {temp:.1f}" for sensor, temp in zip(valid_sensors, temperatures)])
-            )
+        
         except Exception as ex:
             _LOGGER.error("Error updating temperature: %s", ex)
 
@@ -287,7 +279,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             main_action = HVACAction(state.attributes.get("hvac_action", HVACAction.OFF)) if state.attributes else HVACAction.OFF
             self._attr_hvac_action = main_action
             # Kepp track of main thermostat's target_temperature
-            self._main_thermostat_target_temperature = float(state.attributes.get("target_temperature", self._attr_target_temperature))
+            self._main_thermostat_target_temperature = float(state.attributes.get("temperature", self._attr_target_temperature))
             
             # Update the current thermostat's based on the main thermostat change
             task = self.hass.async_create_task(self._async_control_heating_cooling())
@@ -450,7 +442,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
                 _LOGGER.info("Conditions not met, turning off actuator - main thermostat control")                
                 await self._async_actuator_turn_off()
             elif not should_deactivate and not current_device_active:
-                _LOGGER.info("Main thermostat active, turning on actuator - main thermostat control")
+                _LOGGER.info("Turning on actuator - main thermostat control")
                 await self._async_actuator_turn_on()
         except Exception as ex:
             _LOGGER.error("Error in main thermostat control: %s", ex)
@@ -568,11 +560,11 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         
         # Handle dual temperature setpoints for AUTO and HEAT_COOL modes
         target_temp_low = kwargs.get(ATTR_TARGET_TEMP_LOW)
-        if target_temp_low is not None:
+        if target_temp_low is not None and self.hvac_mode == HVACMode.HEAT_COOL:
             self._attr_target_temperature_low = target_temp_low
         
         target_temp_high = kwargs.get(ATTR_TARGET_TEMP_HIGH)
-        if target_temp_high is not None:
+        if target_temp_high is not None and self.hvac_mode == HVACMode.HEAT_COOL:
             self._attr_target_temperature_high = target_temp_high
         
         # Only proceed if we actually got a temperature to set

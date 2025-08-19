@@ -145,7 +145,7 @@ class DamperThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
         else:
             errors[CONF_ACTUATOR_SWITCHES] = "entity_not_found"
             
-        if user_input.get(CONF_MAIN_THERMOSTAT) and not self.hass.states.get(user_input[CONF_MAIN_THERMOSTAT]):
+        if not self.hass.states.get(user_input[CONF_MAIN_THERMOSTAT]):
             errors[CONF_MAIN_THERMOSTAT] = "entity_not_found"
 
         # Validate temperature ranges
@@ -230,7 +230,7 @@ class DamperThermostatOptionsFlow(OptionsFlow):
             else:
                 errors[CONF_ACTUATOR_SWITCHES] = "entity_not_found"
                 
-            if user_input.get(CONF_MAIN_THERMOSTAT) and not self.hass.states.get(user_input[CONF_MAIN_THERMOSTAT]):
+            if not self.hass.states.get(user_input[CONF_MAIN_THERMOSTAT]):
                 errors[CONF_MAIN_THERMOSTAT] = "entity_not_found"
 
             # Validate temperature ranges

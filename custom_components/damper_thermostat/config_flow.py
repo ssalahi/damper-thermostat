@@ -54,7 +54,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_HUMIDITY_SENSOR): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
         ),
-        vol.Optional(CONF_MAIN_THERMOSTAT): selector.EntitySelector(
+        vol.Required(CONF_MAIN_THERMOSTAT): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="climate")
         ),
         vol.Required(CONF_ACTUATOR_SWITCH): selector.EntitySelector(
@@ -298,7 +298,7 @@ class DamperThermostatOptionsFlow(OptionsFlow):
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
                 ),
-                vol.Optional(
+                vol.Required(
                     CONF_MAIN_THERMOSTAT,
                     default=get_current_value(CONF_MAIN_THERMOSTAT, "")
                 ): selector.EntitySelector(

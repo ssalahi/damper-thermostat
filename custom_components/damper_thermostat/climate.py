@@ -166,12 +166,11 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             )
         
         # Add listener for main thermostat if configured
-        if self._main_thermostat_entity_id:
-            self.async_on_remove(
-                async_track_state_change_event(
-                    self.hass, [self._main_thermostat_entity_id], self._async_main_thermostat_changed
-                )
+        self.async_on_remove(
+            async_track_state_change_event(
+                self.hass, [self._main_thermostat_entity_id], self._async_main_thermostat_changed
             )
+        )
 
         # Add listener for actuator switch
         self.async_on_remove(
@@ -213,8 +212,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             self._async_update_humidity(None)
         
         # Set initial main thermostat state
-        if self._main_thermostat_entity_id:
-            self._async_update_main_thermostat_state(None)
+        self._async_update_main_thermostat_state(None)
 
         # Call control logic on startup
         if self.hass.state == "running":
@@ -273,7 +271,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
     def _async_update_main_thermostat_state(self, state) -> None:
         """Update thermostat action based on main thermostat state."""
         try:
-            if state is None and self._main_thermostat_entity_id is not None:
+            if state is None:
                 state = self.hass.states.get(self._main_thermostat_entity_id)
 
             if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
@@ -353,55 +351,14 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
                 if not self._active or self._attr_hvac_mode == HVACMode.OFF:
                     return
 
-                # If we don't have a main thermostat, we control based on our own logic
-                if not self._main_thermostat_entity_id:
-                    await self._async_control_based_on_temperature()
-                else:
-                    # If we have a main thermostat, we follow its state but still control our actuator
-                    await self._async_control_based_on_main_thermostat()
+                await self._async_control_based_on_main_thermostat()
+                
         except Exception as ex:
             _LOGGER.error("Error in control heating/cooling: %s", ex)
-
-    async def _async_control_based_on_temperature(self) -> None:
-        """Control heating/cooling based on temperature difference."""
-        try:
-            too_cold = self._attr_target_temperature >= self._cur_temp + self._cold_tolerance
-            too_hot = self._cur_temp >= self._attr_target_temperature + self._hot_tolerance
-            
-            current_device_active = await self._async_is_device_active()
-            if current_device_active:
-                if self._attr_hvac_mode == HVACMode.HEAT and not too_cold:
-                    _LOGGER.info("Turning off heater - temperature control")
-                    await self._async_actuator_turn_off()
-                elif self._attr_hvac_mode == HVACMode.COOL and not too_hot:
-                    _LOGGER.info("Turning off cooler - temperature control")
-                    await self._async_actuator_turn_off()
-                elif self._attr_hvac_mode == HVACMode.AUTO:
-                    if not too_cold and not too_hot:
-                        _LOGGER.info("Turning off actuator - temperature control (auto mode)")
-                        await self._async_actuator_turn_off()
-            else:
-                if self._attr_hvac_mode == HVACMode.HEAT and too_cold:
-                    _LOGGER.info("Turning on heater - temperature control")
-                    await self._async_actuator_turn_on()
-                elif self._attr_hvac_mode == HVACMode.COOL and too_hot:
-                    _LOGGER.info("Turning on cooler - temperature control")
-                    await self._async_actuator_turn_on()
-                elif self._attr_hvac_mode == HVACMode.AUTO:
-                    if too_cold:
-                        _LOGGER.info("Turning on heater (auto) - temperature control")
-                        await self._async_actuator_turn_on()
-                    elif too_hot:
-                        _LOGGER.info("Turning on cooler (auto) - temperature control")
-                        await self._async_actuator_turn_on()
-        except Exception as ex:
-            _LOGGER.error("Error in temperature-based control: %s", ex)
 
     async def _async_control_based_on_main_thermostat(self) -> None:
         """Control actuator based on main thermostat state and our temperature."""
         try:
-            if self._main_thermostat_entity_id is None: 
-                return
             main_state = self.hass.states.get(self._main_thermostat_entity_id)
             if main_state is None:
                 _LOGGER.warning("Main thermostat %s not found", self._main_thermostat_entity_id)
@@ -429,7 +386,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
                 if main_mode == HVACMode.HEAT:
                     enough_heat = self._attr_target_temperature_high <= (self._cur_temp - self._hot_tolerance)
             should_deactivate = should_deactivate or enough_cold or enough_heat
-            
+
             # Handle heat and cool modes
             if self._attr_hvac_mode == HVACMode.COOL and main_action == HVACAction.COOLING:
                 enough_cold = self._attr_target_temperature >= (self._cur_temp + self._cold_tolerance)
@@ -440,13 +397,13 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             # Auto mode will always keep the actuator on
             if self._attr_hvac_mode == HVACMode.AUTO:
                 should_deactivate = False
-                 
+
             current_device_active = await self._async_is_device_active()
             if should_deactivate and current_device_active:
-                _LOGGER.info("Conditions not met, turning off actuator - main thermostat control")                
+                _LOGGER.info("Thermostat Control: Conditions not met, turning off actuator")
                 await self._async_actuator_turn_off()
             elif not should_deactivate and not current_device_active:
-                _LOGGER.info("Turning on actuator - main thermostat control")
+                _LOGGER.info("Thermostat Control: Turning on actuator")
                 await self._async_actuator_turn_on()
         except Exception as ex:
             _LOGGER.error("Error in main thermostat control: %s", ex)
@@ -559,7 +516,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         """Set new target temperature."""
         # Handle single temperature setpoint
         temperature = kwargs.get(ATTR_TEMPERATURE)
-        if temperature is not None and (self.hvac_mode is not HVACMode.AUTO or not self._main_thermostat_entity_id):
+        if temperature is not None and self.hvac_mode is not HVACMode.AUTO:
             self._attr_target_temperature = temperature
         
         # Handle dual temperature setpoints for AUTO and HEAT_COOL modes
@@ -588,8 +545,6 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         if self.hvac_mode in [HVACMode.COOL, HVACMode.HEAT]:
             return self._attr_target_temperature
         elif self.hvac_mode == HVACMode.AUTO: 
-            if not self._main_thermostat_entity_id:
-                return self._attr_target_temperature
             return self._main_thermostat_target_temperature
         return None
 

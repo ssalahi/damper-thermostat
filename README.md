@@ -1,21 +1,49 @@
-# Damper Thermostat for Home Assistant
+# Smart Damper Thermostat for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 [![GitHub release](https://img.shields.io/github/release/ssalahi/damper-thermostat.svg)](https://github.com/ssalahi/damper-thermostat/releases)
 
-A custom Home Assistant component that creates an advanced thermostat device with enhanced features beyond the standard Generic Thermostat. The Damper Thermostat supports Cool/Heat/Auto modes and can work independently or in conjunction with a main thermostat.
+A sophisticated Home Assistant custom component that creates an intelligent damper thermostat system with advanced zone control capabilities. This component is designed for HVAC systems with multiple zones and dampers, providing coordinated temperature control that works in harmony with your main thermostat system.
 
-## Features
+## What is a Damper Thermostat?
 
-- **Multiple HVAC Modes**: Supports Heat, Cool, Auto, and Off modes
-- **Temperature Control**: Uses external temperature sensor for accurate readings
-- **Humidity Monitoring**: Optional humidity sensor integration
-- **Actuator Control**: Controls heating/cooling devices via switch entities
-- **Main Thermostat Integration**: Can follow the state of a main thermostat for coordinated operation
-- **Configurable Tolerances**: Separate cold and hot tolerance settings
+A damper thermostat controls motorized dampers in HVAC ductwork to regulate airflow to specific zones. Unlike traditional thermostats that control the HVAC unit directly, damper thermostats work by opening and closing dampers to allow or restrict conditioned air flow to individual rooms or zones. This component creates virtual thermostats that can:
+
+- Control multiple temperature sensors for accurate zone temperature readings
+- Manage damper actuator switches to control airflow
+- Coordinate with your main HVAC thermostat for optimal system operation
+- Implement intelligent damper management to prevent system damage
+- Support multiple HVAC modes including Heat, Cool, Auto, and Heat/Cool
+
+## Key Features
+
+### Advanced Temperature Control
+- **Multiple Temperature Sensors**: Supports multiple temperature sensors per zone with automatic averaging
+- **Precision Control**: Configurable temperature tolerances and precision settings
+- **Dual Setpoint Support**: Heat/Cool mode with separate high and low temperature targets
 - **Temperature Limits**: Configurable minimum and maximum temperature ranges
-- **State Persistence**: Remembers settings across Home Assistant restarts
-- **Easy Configuration**: User-friendly config flow setup
+
+### Intelligent Damper Management
+- **Priority-Based Control**: Manages multiple damper switches with priority ordering
+- **System Protection**: Configurable maximum number of dampers that can be closed simultaneously
+- **Smart Switching**: Automatically manages damper states to prevent HVAC system damage
+
+### Main Thermostat Integration
+- **Coordinated Operation**: Works in harmony with your main HVAC thermostat
+- **Action Mirroring**: Follows main thermostat's heating/cooling actions
+- **Intelligent Logic**: Only operates dampers when main system is actively heating/cooling
+
+### Multiple HVAC Modes
+- **Heat Mode**: Opens dampers when zone needs heating and main system is heating
+- **Cool Mode**: Opens dampers when zone needs cooling and main system is cooling  
+- **Auto Mode**: Keeps dampers open, letting main thermostat control the system
+- **Heat/Cool Mode**: Dual setpoint control with separate heating and cooling targets
+- **Off Mode**: Closes dampers completely
+
+### Enhanced Features
+- **Humidity Monitoring**: Optional humidity sensor integration
+- **State Persistence**: Remembers all settings across Home Assistant restarts
+- **Easy Configuration**: User-friendly config flow with options for post-setup changes
 
 ## Installation
 
@@ -40,184 +68,162 @@ A custom Home Assistant component that creates an advanced thermostat device wit
 
 ## Configuration
 
-### Adding a New Damper Thermostat Device
-
-After installing the component, follow these steps to add a new thermostat device:
-
-#### Step 1: Access Integrations
-1. Open Home Assistant web interface
-2. Go to **Settings** → **Devices & Services**
-3. Click the **"+ ADD INTEGRATION"** button (bottom right)
-
-#### Step 2: Find the Integration
-1. In the search box, type **"Damper Thermostat"**
-2. Click on **"Damper Thermostat"** when it appears in the list
-3. If you don't see it, make sure you've restarted Home Assistant after installation
-
-#### Step 3: Configure Your Thermostat
-You'll be presented with a configuration form. Fill in the following:
-
-**Required Fields:**
-- **Name**: Give your thermostat a name (e.g., "Living Room Damper", "Bedroom Zone Control")
-- **Temperature Sensor**: Select an existing temperature sensor entity (e.g., `sensor.living_room_temperature`)
-- **Actuator Switch**: Select a switch entity that controls your heating/cooling device (e.g., `switch.heater_relay`)
-
-**Optional Fields:**
-- **Humidity Sensor**: Select a humidity sensor if you have one (e.g., `sensor.living_room_humidity`)
-- **Main Thermostat**: Select your main HVAC thermostat if you want coordination (e.g., `climate.main_hvac`)
-- **Cold Tolerance**: Temperature difference before heating activates (default: 0.5°F)
-- **Hot Tolerance**: Temperature difference before cooling activates (default: 0.5°F)
-- **Min/Max Temperature**: Set the temperature range limits
-- **Initial Target Temperature**: Starting temperature when first created
-- **Temperature Precision**: How precise temperature adjustments should be (0.1, 0.5, or 1.0)
-- **Initial HVAC Mode**: Starting mode (Heat, Cool, Auto, or Off)
-
-#### Step 4: Complete Setup
-1. Click **"Submit"** to create the thermostat
-2. The new thermostat device will appear in your Devices & Services list
-3. You can now find it in the Climate section of your dashboard
-
-### Editing Configuration After Setup
-
-You can modify certain settings after the initial setup:
-
-1. Go to **Settings** → **Devices & Services**
-2. Find your **Damper Thermostat** integration
-3. Click **"Configure"** (gear icon)
-4. Modify any of the following settings:
-   - Cold Tolerance
-   - Hot Tolerance
-   - Minimum Temperature
-   - Maximum Temperature
-   - Target Temperature
-   - Temperature Precision
-   - HVAC Mode
-
-**Note**: All settings including entity selections can be changed after initial setup. Changes take effect immediately after saving.
-
 ### Prerequisites
 
-Before adding the integration, make sure you have:
+Before setting up the integration, ensure you have:
 
-1. **Temperature Sensor**: Any sensor entity that reports temperature (required)
-   ```yaml
-   # Example temperature sensor
-   sensor:
-     - platform: template
-       sensors:
-         room_temperature:
-           friendly_name: "Room Temperature"
-           unit_of_measurement: "°F"
-           value_template: "{{ states('sensor.your_temp_sensor') }}"
-   ```
+1. **Temperature Sensors**: One or more temperature sensor entities for each zone
+2. **Damper Actuator Switches**: Switch entities that control your damper motors
+3. **Main Thermostat** (recommended): Your primary HVAC thermostat entity
+4. **Humidity Sensor** (optional): Humidity sensor entity for the zone
 
-2. **Switch Entity**: A switch that controls your heating/cooling device (required)
-   ```yaml
-   # Example switch for heater control
-   switch:
-     - platform: template
-       switches:
-         room_heater:
-           friendly_name: "Room Heater"
-           turn_on:
-             service: switch.turn_on
-             target:
-               entity_id: switch.heater_relay
-           turn_off:
-             service: switch.turn_off
-             target:
-               entity_id: switch.heater_relay
-   ```
+### Adding a Damper Thermostat
 
-3. **Humidity Sensor** (optional): Any sensor entity that reports humidity percentage
+1. Go to **Settings** → **Devices & Services**
+2. Click **"+ ADD INTEGRATION"**
+3. Search for and select **"Damper Thermostat"**
+4. Fill out the configuration form:
 
-4. **Main Thermostat** (optional): An existing climate entity if you want coordination
+#### Required Configuration
+- **Name**: Descriptive name for your zone (e.g., "Living Room Zone", "Master Bedroom")
+- **Temperature Sensor(s)**: Select one or more temperature sensors for the zone
+- **Actuator Switch**: Select the switch entity that controls the damper motor
+- **Main Thermostat**: Select your main HVAC thermostat for coordination
+- **Actuator Switches List**: List of all damper switches in your system (for priority management)
+- **Max Switches Off**: Maximum number of dampers that can be closed simultaneously
+
+#### Optional Configuration
+- **Humidity Sensor**: Select a humidity sensor for the zone
+- **Cold/Hot Tolerance**: Temperature difference before damper activates
+- **Temperature Limits**: Minimum and maximum settable temperatures
+- **Initial Settings**: Starting target temperature and HVAC mode
 
 ### Configuration Options
 
 | Option | Required | Description | Default |
 |--------|----------|-------------|---------|
-| Name | Yes | Name for your thermostat | - |
-| Temperature Sensor | Yes | Entity ID of temperature sensor | - |
-| Humidity Sensor | No | Entity ID of humidity sensor | - |
-| Actuator Switch | Yes | Entity ID of switch to control heating/cooling | - |
-| Main Thermostat | No | Entity ID of main thermostat to follow | - |
-| Cold Tolerance | No | Temperature difference before heating activates | 0.5°F |
-| Hot Tolerance | No | Temperature difference before cooling activates | 0.5°F |
-| Minimum Temperature | No | Minimum settable temperature | 60°F |
-| Maximum Temperature | No | Maximum settable temperature | 80°F |
-| Initial Target Temperature | No | Starting target temperature | 70°F |
-| Temperature Precision | No | Temperature adjustment precision | 0.1 |
+| Name | Yes | Zone name | - |
+| Temperature Sensor(s) | Yes | Temperature sensor entity ID(s) | - |
+| Humidity Sensor | No | Humidity sensor entity ID | - |
+| Actuator Switch | Yes | Damper switch entity ID | - |
+| Main Thermostat | Yes | Main HVAC thermostat entity ID | - |
+| Actuator Switches | Yes | List of all damper switches for priority management | - |
+| Max Switches Off | Yes | Maximum dampers that can be closed | 3 |
+| Cold Tolerance | No | Temperature difference before heating | 0.5°F |
+| Hot Tolerance | No | Temperature difference before cooling | 0.5°F |
+| Min/Max Temperature | No | Temperature range limits | 60-80°F |
+| Initial Target Temperature | No | Starting target temperature | 74°F |
 | Initial HVAC Mode | No | Starting HVAC mode | Off |
 
-## Usage
+## How It Works
 
 ### Standalone Operation
+When no main thermostat is configured, the damper thermostat operates independently:
+- **Heat Mode**: Opens damper when zone temperature < (target - cold tolerance)
+- **Cool Mode**: Opens damper when zone temperature > (target + hot tolerance)
+- **Auto Mode**: Automatically switches between heating and cooling logic
+- **Heat/Cool Mode**: Uses separate high/low setpoints for dual-zone comfort
 
-When no main thermostat is configured, the Damper Thermostat operates independently:
+### Coordinated Operation
+When a main thermostat is configured, the damper thermostat coordinates intelligently:
+- Monitors main thermostat's current action (heating/cooling/idle)
+- Only opens dampers when main system is actively heating/cooling AND zone needs conditioning
+- Respects local temperature conditions and tolerances
+- Prevents unnecessary damper operation when main system is idle
 
-- **Heat Mode**: Activates the actuator switch when temperature falls below (target - cold tolerance)
-- **Cool Mode**: Activates the actuator switch when temperature rises above (target + hot tolerance)
-- **Auto Mode**: Automatically switches between heating and cooling as needed
-- **Off Mode**: Keeps the actuator switch off
+### Priority Management
+When multiple damper thermostats are configured with the actuator switches list:
+- Maintains a priority order for damper operation
+- Ensures minimum number of dampers remain open to prevent system damage
+- Automatically manages damper switching to maintain system balance
+- Higher priority zones get preference when damper limits are reached
 
-### Main Thermostat Integration
+## Usage Examples
 
-When a main thermostat is configured, the Damper Thermostat coordinates with it:
-
-- Monitors the main thermostat's HVAC action (heating/cooling/idle)
-- Only activates the actuator when the main thermostat is actively heating/cooling
-- Still respects local temperature conditions and tolerances
-- Displays the main thermostat's current action status
-
-## Examples
-
-### Basic Setup (Standalone)
-
+### Basic Zone Control
 ```yaml
-# Example entities you might have
-sensor:
-  - platform: template
-    sensors:
-      room_temperature:
-        friendly_name: "Room Temperature"
-        unit_of_measurement: "°F"
-        value_template: "{{ states('sensor.temperature_sensor') }}"
-
-switch:
-  - platform: template
-    switches:
-      room_heater:
-        friendly_name: "Room Heater"
-        turn_on:
-          service: switch.turn_on
-          target:
-            entity_id: switch.heater_relay
-        turn_off:
-          service: switch.turn_off
-          target:
-            entity_id: switch.heater_relay
+# Example: Living room zone with single temperature sensor
+Name: "Living Room Zone"
+Temperature Sensor: sensor.living_room_temperature
+Actuator Switch: switch.living_room_damper
+Main Thermostat: climate.main_hvac
 ```
 
-### Advanced Setup (With Main Thermostat)
+### Multi-Sensor Zone
+```yaml
+# Example: Large zone with multiple temperature sensors
+Name: "Open Floor Plan"
+Temperature Sensors: 
+  - sensor.kitchen_temperature
+  - sensor.dining_room_temperature
+  - sensor.living_room_temperature
+Actuator Switch: switch.main_floor_damper
+```
 
-This setup allows the damper thermostat to work in coordination with your main HVAC system:
+### Complete System Setup
+```yaml
+# Example: Full system with priority management
+Name: "Master Bedroom"
+Temperature Sensor: sensor.master_bedroom_temperature
+Humidity Sensor: sensor.master_bedroom_humidity
+Actuator Switch: switch.master_bedroom_damper
+Main Thermostat: climate.main_hvac
+Actuator Switches:
+  - switch.master_bedroom_damper    # Priority 1
+  - switch.living_room_damper       # Priority 2
+  - switch.guest_bedroom_damper     # Priority 3
+Max Switches Off: 2
+```
 
-1. Configure your main thermostat (e.g., `climate.main_hvac`)
-2. Set up the damper thermostat with the main thermostat as input
-3. The damper will only activate when the main system is running and local conditions require it
+## Advanced Features
+
+### Heat/Cool Mode
+Perfect for zones that need both heating and cooling with different comfort ranges:
+- Set target temperature low (e.g., 72°F) for heating threshold
+- Set target temperature high (e.g., 76°F) for cooling threshold
+- Damper opens for heating when temp < 72°F and main system is heating
+- Damper opens for cooling when temp > 76°F and main system is cooling
+
+### Auto Mode
+Ideal for zones that should always receive conditioned air:
+- Keeps damper open regardless of local temperature
+- Lets main thermostat control overall system operation
+- Perfect for critical zones or areas with poor air circulation
+
+### System Protection
+The component includes several safety features:
+- Prevents all dampers from closing simultaneously
+- Manages damper priority to maintain system airflow
+- Coordinates with main thermostat to prevent conflicts
+- Includes error handling and recovery mechanisms
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Thermostat not responding**: Check that all entity IDs are correct and entities exist
-2. **Temperature not updating**: Verify the temperature sensor is working and reporting values
-3. **Actuator not switching**: Ensure the switch entity is controllable and not disabled
+**Damper not responding**
+- Verify actuator switch entity is correct and controllable
+- Check that switch responds to manual on/off commands
+- Ensure damper motor is properly wired and powered
+
+**Temperature not updating**
+- Confirm temperature sensor entities are working
+- Check sensor values in Developer Tools → States
+- Verify sensors report numeric temperature values
+
+**No coordination with main thermostat**
+- Ensure main thermostat entity ID is correct
+- Verify main thermostat reports hvac_action attribute
+- Check main thermostat is actively heating/cooling
+
+**Multiple dampers closing unexpectedly**
+- Review Max Switches Off setting
+- Check Actuator Switches list configuration
+- Verify priority order is correct
 
 ### Debug Logging
 
-Add this to your `configuration.yaml` to enable debug logging:
+Enable detailed logging by adding to `configuration.yaml`:
 
 ```yaml
 logger:
@@ -240,9 +246,12 @@ If you encounter any issues or have questions, please [open an issue](https://gi
 ## Changelog
 
 ### Version 1.0.0
-- Initial release
-- Support for Heat/Cool/Auto/Off modes
-- Temperature and humidity sensor integration
-- Main thermostat coordination
-- Configurable tolerances and limits
-- HACS compatibility
+- Initial release with advanced damper control
+- Multiple temperature sensor support with averaging
+- Priority-based damper management system
+- Main thermostat coordination and action mirroring
+- Support for Heat/Cool/Auto/Heat_Cool/Off modes
+- Configurable system protection limits
+- State persistence and restore functionality
+- Dynamic icons and comprehensive device information
+- HACS compatibility and easy configuration flow

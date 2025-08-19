@@ -187,12 +187,16 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
                 # If we have a previously saved temperature
                 if old_state.attributes.get(ATTR_TEMPERATURE) is None:
                     self._attr_target_temperature = self.min_temp
-                    _LOGGER.warning(
-                        "Undefined target temperature, falling back to %s",
-                        self._attr_target_temperature,
-                    )
                 else:
                     self._attr_target_temperature = float(old_state.attributes[ATTR_TEMPERATURE])
+
+            # Restore target_temperature_low if available
+            if old_state.attributes.get(ATTR_TARGET_TEMP_LOW) is not None:
+                self._attr_target_temperature_low = float(old_state.attributes[ATTR_TARGET_TEMP_LOW])
+
+            # Restore target_temperature_high if available
+            if old_state.attributes.get(ATTR_TARGET_TEMP_HIGH) is not None:
+                self._attr_target_temperature_high = float(old_state.attributes[ATTR_TARGET_TEMP_HIGH])
 
             if old_state.state and old_state.state != STATE_UNKNOWN:
                 self._attr_hvac_mode = HVACMode(old_state.state)

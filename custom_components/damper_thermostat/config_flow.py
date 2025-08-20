@@ -91,9 +91,12 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_TARGET_TEMP_HIGH, default=DEFAULT_TARGET_TEMP_HIGH): vol.All(
             vol.Coerce(float), vol.Range(min=70, max=90)
         ),
-        vol.Optional(CONF_INITIAL_HVAC_MODE, default=HVACMode.AUTO): vol.In(
-            [HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.HEAT_COOL, HVACMode.OFF]
-        ),
+        vol.Optional(CONF_INITIAL_HVAC_MODE, default=HVACMode.AUTO): selector.selector({
+            "select": {
+                "options": [HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO, HVACMode.HEAT_COOL, HVACMode.OFF],
+                "mode": "dropdown"
+                }
+        }),
     }
 )
 

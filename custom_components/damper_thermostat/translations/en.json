@@ -2,24 +2,37 @@
   "config": {
     "step": {
       "user": {
-        "title": "Damper Thermostat Setup",
-        "description": "Configure your Damper Thermostat",
+        "title": "Damper Thermostat",
+        "menu_options": {
+          "device": "Add Device",
+          "global_settings": "Global Settings"
+        }
+      },
+      "device": {
+        "title": "Add Damper Thermostat Device",
+        "description": "Configure a new Damper Thermostat device",
         "data": {
           "name": "Name",
-          "temperature_sensor": "Temperature Sensor",
+          "temperature_sensor": "Temperature Sensor(s)",
           "humidity_sensor": "Humidity Sensor (Optional)",
           "actuator_switch": "Actuator Switch",
-          "actuator_switches": "Shared Actuator Switches List (Priority Order)",
-          "max_switches_off": "Maximum Switches Off Limit (Global)",
           "main_thermostat": "Main Thermostat",
           "cold_tolerance": "Cold Tolerance",
           "hot_tolerance": "Hot Tolerance",
-          "min_temp": "Minimum Temperature",
-          "max_temp": "Maximum Temperature",
           "target_temp": "Initial Target Temperature",
           "target_temp_low": "Target Temperature Low",
           "target_temp_high": "Target Temperature High",
           "initial_hvac_mode": "Initial HVAC Mode"
+        }
+      },
+      "global_settings": {
+        "title": "Global Settings",
+        "description": "Configure global settings shared by all Damper Thermostat devices",
+        "data": {
+          "global_actuator_switches": "Global Actuator Switches List (Priority Order)",
+          "global_max_switches_off": "Global Maximum Switches Off Limit",
+          "global_min_temp": "Global Minimum Temperature",
+          "global_max_temp": "Global Maximum Temperature"
         }
       }
     },
@@ -44,7 +57,7 @@
         "description": "Update configuration for {name}",
         "data": {
           "name": "Name",
-          "temperature_sensor": "Temperature Sensor",
+          "temperature_sensor": "Temperature Sensor(s)",
           "humidity_sensor": "Humidity Sensor (Optional)",
           "actuator_switch": "Actuator Switch",
           "actuator_switches": "Shared Actuator Switches List (Priority Order)",

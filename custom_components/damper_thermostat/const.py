@@ -10,17 +10,20 @@ from homeassistant.const import (
 
 DOMAIN = "damper_thermostat"
 
+# Global configuration keys
+CONF_GLOBAL_SETTINGS = "global_settings"
+CONF_GLOBAL_ACTUATOR_SWITCHES = "global_actuator_switches"
+CONF_GLOBAL_MAX_SWITCHES_OFF = "global_max_switches_off"
+CONF_GLOBAL_MIN_TEMP = "global_min_temp"
+CONF_GLOBAL_MAX_TEMP = "global_max_temp"
+
 # Configuration keys
 CONF_TEMPERATURE_SENSOR = "temperature_sensor"
 CONF_HUMIDITY_SENSOR = "humidity_sensor"
 CONF_ACTUATOR_SWITCH = "actuator_switch"
-CONF_ACTUATOR_SWITCHES = "actuator_switches"
-CONF_MAX_SWITCHES_OFF = "max_switches_off"
 CONF_MAIN_THERMOSTAT = "main_thermostat"
 CONF_COLD_TOLERANCE = "cold_tolerance"
 CONF_HOT_TOLERANCE = "hot_tolerance"
-CONF_MIN_TEMP = "min_temp"
-CONF_MAX_TEMP = "max_temp"
 CONF_TARGET_TEMP = "target_temp"
 CONF_TARGET_TEMP_LOW = "target_temp_low"
 CONF_TARGET_TEMP_HIGH = "target_temp_high"

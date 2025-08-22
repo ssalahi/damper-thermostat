@@ -19,17 +19,18 @@ from .const import (
     CONF_TEMPERATURE_SENSOR,
     CONF_HUMIDITY_SENSOR,
     CONF_ACTUATOR_SWITCH,
-    CONF_ACTUATOR_SWITCHES,
-    CONF_MAX_SWITCHES_OFF,
     CONF_MAIN_THERMOSTAT,
     CONF_COLD_TOLERANCE,
     CONF_HOT_TOLERANCE,
-    CONF_MIN_TEMP,
-    CONF_MAX_TEMP,
     CONF_TARGET_TEMP,
     CONF_TARGET_TEMP_LOW,
     CONF_TARGET_TEMP_HIGH,
     CONF_INITIAL_HVAC_MODE,
+    CONF_GLOBAL_SETTINGS,
+    CONF_GLOBAL_ACTUATOR_SWITCHES,
+    CONF_GLOBAL_MAX_SWITCHES_OFF,
+    CONF_GLOBAL_MIN_TEMP,
+    CONF_GLOBAL_MAX_TEMP,
     DEFAULT_TOLERANCE,
     DEFAULT_MIN_TEMP,
     DEFAULT_MAX_TEMP,
@@ -42,33 +43,37 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+GLOBAL_SETTINGS_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_GLOBAL_ACTUATOR_SWITCHES): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="switch", multiple=True)
+        ),
+        vol.Optional(CONF_GLOBAL_MAX_SWITCHES_OFF, default=DEFAULT_MAX_SWITCHES_OFF): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=10)
+        ),
+        vol.Optional(CONF_GLOBAL_MIN_TEMP, default=DEFAULT_MIN_TEMP): vol.All(
+            vol.Coerce(float), vol.Range(min=40, max=80)
+        ),
+        vol.Optional(CONF_GLOBAL_MAX_TEMP, default=DEFAULT_MAX_TEMP): vol.All(
+            vol.Coerce(float), vol.Range(min=50, max=100)
+        ),
+    }
+)
+
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_NAME): cv.string,
         vol.Required(CONF_TEMPERATURE_SENSOR): selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="sensor", 
-                device_class="temperature",
-                multiple=True
-            )
+            selector.EntitySelectorConfig(domain="sensor", device_class="temperature", multiple=True)
         ),
         vol.Optional(CONF_HUMIDITY_SENSOR): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+            selector.EntitySelectorConfig(domain="sensor", device_class="humidity", multiple=True)
         ),
         vol.Required(CONF_MAIN_THERMOSTAT): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="climate")
         ),
         vol.Required(CONF_ACTUATOR_SWITCH): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="switch")
-        ),
-        vol.Required(CONF_ACTUATOR_SWITCHES): selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="switch",
-                multiple=True
-            )
-        ),
-        vol.Optional(CONF_MAX_SWITCHES_OFF, default=DEFAULT_MAX_SWITCHES_OFF): vol.All(
-            vol.Coerce(int), vol.Range(min=1, max=10)
+            selector.EntitySelectorConfig(domain="switch", multiple=True)
         ),
         vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): vol.All(
             vol.Coerce(float), vol.Range(min=0.1, max=10.0)
@@ -76,20 +81,14 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): vol.All(
             vol.Coerce(float), vol.Range(min=0.1, max=10.0)
         ),
-        vol.Optional(CONF_MIN_TEMP, default=DEFAULT_MIN_TEMP): vol.All(
-            vol.Coerce(float), vol.Range(min=40, max=70)
-        ),
-        vol.Optional(CONF_MAX_TEMP, default=DEFAULT_MAX_TEMP): vol.All(
-            vol.Coerce(float), vol.Range(min=70, max=100)
-        ),
         vol.Optional(CONF_TARGET_TEMP, default=DEFAULT_TARGET_TEMP): vol.All(
-            vol.Coerce(float), vol.Range(min=40, max=80)
+            vol.Coerce(float), vol.Range(min=50, max=80)
         ),
         vol.Optional(CONF_TARGET_TEMP_LOW, default=DEFAULT_TARGET_TEMP_LOW): vol.All(
-            vol.Coerce(float), vol.Range(min=60, max=80)
+            vol.Coerce(float), vol.Range(min=40, max=80)
         ),
         vol.Optional(CONF_TARGET_TEMP_HIGH, default=DEFAULT_TARGET_TEMP_HIGH): vol.All(
-            vol.Coerce(float), vol.Range(min=70, max=90)
+            vol.Coerce(float), vol.Range(min=50, max=99)
         ),
         vol.Optional(CONF_INITIAL_HVAC_MODE, default=HVACMode.AUTO): selector.selector({
             "select": {
@@ -111,96 +110,77 @@ class DamperThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle the initial step."""
+        return self.async_show_menu(
+            step_id="user",
+            menu_options=["device", CONF_GLOBAL_SETTINGS],
+        )
+
+    async def async_step_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle device configuration."""
         if user_input is None:
             return self.async_show_form(
-                step_id="user", data_schema=STEP_USER_DATA_SCHEMA
+                step_id="device", data_schema=STEP_USER_DATA_SCHEMA
             )
 
         errors = {}
-
-        # Validate entities exist
-        errors.update(await self._validate_entities(user_input))
         
         # Validate temperature ranges
         errors.update(self._validate_temperature_ranges(user_input))
 
         if errors:
             return self.async_show_form(
-                step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
+                step_id="device", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
             )
 
         # Create a unique ID based on the actuator switch entity
-        actuator_switch = user_input[CONF_ACTUATOR_SWITCH]
-        await self.async_set_unique_id(f"{actuator_switch}_{DOMAIN}")
+        actuator_switches = "_".join(user_input[CONF_ACTUATOR_SWITCH])
+        await self.async_set_unique_id(f"{actuator_switches}_{DOMAIN}")
         self._abort_if_unique_id_configured()
 
         return self.async_create_entry(title=user_input[CONF_NAME], data=user_input)
 
-    async def _validate_entities(self, user_input: dict[str, Any]) -> dict[str, str]:
-        """Validate that all required entities exist."""
+    async def async_step_global_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle global settings configuration."""
+        if user_input is None:
+            return self.async_show_form(
+                step_id=CONF_GLOBAL_SETTINGS, data_schema=GLOBAL_SETTINGS_SCHEMA
+            )
+
         errors = {}
 
-        # Validate temperature sensors (can be single entity or list of entities)
-        temp_sensors = user_input[CONF_TEMPERATURE_SENSOR]
-        if isinstance(temp_sensors, str):
-            # Single sensor
-            if not self.hass.states.get(temp_sensors):
-                errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
-        elif isinstance(temp_sensors, list):
-            # Multiple sensors
-            for sensor in temp_sensors:
-                if not self.hass.states.get(sensor):
-                    errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
-                    break
-        else:
-            errors[CONF_TEMPERATURE_SENSOR] = "entity_not_found"
+        # Validate temperature ranges
+        min_temp = user_input.get(CONF_GLOBAL_MIN_TEMP, DEFAULT_MIN_TEMP)
+        max_temp = user_input.get(CONF_GLOBAL_MAX_TEMP, DEFAULT_MAX_TEMP)
         
-        # Validate optional humidity sensor
-        if user_input.get(CONF_HUMIDITY_SENSOR) and not self.hass.states.get(user_input[CONF_HUMIDITY_SENSOR]):
-            errors[CONF_HUMIDITY_SENSOR] = "entity_not_found"
-            
-        # Validate main actuator switch
-        if not self.hass.states.get(user_input[CONF_ACTUATOR_SWITCH]):
-            errors[CONF_ACTUATOR_SWITCH] = "entity_not_found"
-            
-        # Validate actuator switches list
-        actuator_switches = user_input[CONF_ACTUATOR_SWITCHES]
-        if isinstance(actuator_switches, list):
-            for switch in actuator_switches:
-                if not self.hass.states.get(switch):
-                    errors[CONF_ACTUATOR_SWITCHES] = "entity_not_found"
-                    break
-        else:
-            errors[CONF_ACTUATOR_SWITCHES] = "entity_not_found"
-            
-        # Validate main thermostat
-        if not self.hass.states.get(user_input[CONF_MAIN_THERMOSTAT]):
-            errors[CONF_MAIN_THERMOSTAT] = "entity_not_found"
+        if min_temp >= max_temp:
+            errors[CONF_GLOBAL_MIN_TEMP] = "min_temp_must_be_less_than_max_temp"
 
-        return errors
+        if errors:
+            return self.async_show_form(
+                step_id=CONF_GLOBAL_SETTINGS, data_schema=GLOBAL_SETTINGS_SCHEMA, errors=errors
+            )
+
+        # Create global settings entry
+        user_input["entry_type"] = CONF_GLOBAL_SETTINGS
+        await self.async_set_unique_id(f"{DOMAIN}_{CONF_GLOBAL_SETTINGS}")
+        self._abort_if_unique_id_configured(updates=user_input)
+
+        return self.async_create_entry(title="Global Settings", data=user_input)
 
     def _validate_temperature_ranges(self, user_input: dict[str, Any]) -> dict[str, str]:
         """Validate temperature range settings."""
         errors = {}
         
-        min_temp = user_input.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
-        max_temp = user_input.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
-        target_temp = user_input.get(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP)
         target_temp_low = user_input.get(CONF_TARGET_TEMP_LOW, DEFAULT_TARGET_TEMP_LOW)
         target_temp_high = user_input.get(CONF_TARGET_TEMP_HIGH, DEFAULT_TARGET_TEMP_HIGH)
-
-        if min_temp >= max_temp:
-            errors[CONF_MIN_TEMP] = "min_temp_must_be_less_than_max_temp"
-        
-        if target_temp < min_temp or target_temp > max_temp:
-            errors[CONF_TARGET_TEMP] = "target_temp_out_of_range"
         
         if target_temp_low >= target_temp_high:
             errors[CONF_TARGET_TEMP_LOW] = "temp_low_must_be_less_than_temp_high"
         
-        if target_temp_low < min_temp or target_temp_high > max_temp:
-            errors[CONF_TARGET_TEMP_LOW] = "temp_range_out_of_bounds"
-
         return errors
 
     @staticmethod
@@ -214,41 +194,22 @@ OPTIONS_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_NAME): cv.string,
         vol.Required(CONF_TEMPERATURE_SENSOR): selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="sensor", 
-                device_class="temperature",
-                multiple=True
-            )
+            selector.EntitySelectorConfig(domain="sensor", device_class="temperature", multiple=True)
         ),
         vol.Optional(CONF_HUMIDITY_SENSOR): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+            selector.EntitySelectorConfig(domain="sensor", device_class="humidity", multiple=True)
         ),
         vol.Required(CONF_MAIN_THERMOSTAT): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="climate")
         ),
         vol.Required(CONF_ACTUATOR_SWITCH): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="switch")
-        ),
-        vol.Required(CONF_ACTUATOR_SWITCHES): selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="switch",
-                multiple=True
-            )
-        ),
-        vol.Optional(CONF_MAX_SWITCHES_OFF): vol.All(
-            vol.Coerce(int), vol.Range(min=1, max=10)
+            selector.EntitySelectorConfig(domain="switch", multiple=True)
         ),
         vol.Optional(CONF_COLD_TOLERANCE): vol.All(
             vol.Coerce(float), vol.Range(min=0.1, max=10.0)
         ),
         vol.Optional(CONF_HOT_TOLERANCE): vol.All(
             vol.Coerce(float), vol.Range(min=0.1, max=10.0)
-        ),
-        vol.Optional(CONF_MIN_TEMP): vol.All(
-            vol.Coerce(float), vol.Range(min=40, max=70)
-        ),
-        vol.Optional(CONF_MAX_TEMP): vol.All(
-            vol.Coerce(float), vol.Range(min=70, max=100)
         ),
     }
 )
@@ -264,11 +225,6 @@ class DamperThermostatOptionsFlow(OptionsFlowWithReload):
         if user_input is not None:
             # Basic validation for temperature ranges
             errors = {}
-            min_temp = user_input.get(CONF_MIN_TEMP)
-            max_temp = user_input.get(CONF_MAX_TEMP)
-            
-            if min_temp is not None and max_temp is not None and min_temp >= max_temp:
-                errors[CONF_MIN_TEMP] = "min_temp_must_be_less_than_max_temp"
 
             if errors:
                 return self.async_show_form(

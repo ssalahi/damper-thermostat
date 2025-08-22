@@ -93,13 +93,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._attr_unique_id = f"{DOMAIN}_{entry_id}"
         
         # Entity configurations (can be changed via options)
-        temp_sensors = options.get(CONF_TEMPERATURE_SENSOR, config[CONF_TEMPERATURE_SENSOR])
-        # Handle both single sensor (string) and multiple sensors (list)
-        if isinstance(temp_sensors, list):
-            self._temperature_sensor_entity_ids = temp_sensors
-        else:
-            self._temperature_sensor_entity_ids = [temp_sensors]
-
+        self._temperature_sensor_entity_ids = options.get(CONF_TEMPERATURE_SENSOR, config[CONF_TEMPERATURE_SENSOR])
         self._humidity_sensor_entity_ids = options.get(CONF_HUMIDITY_SENSOR, config.get(CONF_HUMIDITY_SENSOR))
         self._actuator_switch_entity_ids = options.get(CONF_ACTUATOR_SWITCH, config[CONF_ACTUATOR_SWITCH])
         
@@ -121,12 +115,8 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._cold_tolerance = options.get(CONF_COLD_TOLERANCE, config.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE))
         self._hot_tolerance = options.get(CONF_HOT_TOLERANCE, config.get(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE))
         # Temperature limits - use global settings
-        self._attr_min_temp = get_global_setting(
-            hass, CONF_GLOBAL_MIN_TEMP, DEFAULT_MIN_TEMP
-        )
-        self._attr_max_temp = get_global_setting(
-            hass, CONF_GLOBAL_MAX_TEMP, DEFAULT_MAX_TEMP
-        )
+        self._attr_min_temp = get_global_setting(hass, CONF_GLOBAL_MIN_TEMP, DEFAULT_MIN_TEMP)
+        self._attr_max_temp = get_global_setting(hass, CONF_GLOBAL_MAX_TEMP, DEFAULT_MAX_TEMP)
         self._attr_target_temperature = options.get(CONF_TARGET_TEMP, config.get(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP))
         self._attr_target_temperature_low = options.get(CONF_TARGET_TEMP_LOW, config.get(CONF_TARGET_TEMP_LOW, DEFAULT_TARGET_TEMP_LOW))
         self._attr_target_temperature_high = options.get(CONF_TARGET_TEMP_HIGH, config.get(CONF_TARGET_TEMP_HIGH, DEFAULT_TARGET_TEMP_HIGH))
@@ -134,7 +124,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._attr_target_temperature_step = PRECISION_HALVES
         
         # Set initial HVAC mode
-        self._attr_hvac_mode = options.get(CONF_INITIAL_HVAC_MODE, config.get(CONF_INITIAL_HVAC_MODE, HVACMode.OFF))
+        self._attr_hvac_mode = options.get(CONF_INITIAL_HVAC_MODE, config.get(CONF_INITIAL_HVAC_MODE, HVACMode.AUTO))
         
         # State variables
         self._attr_current_temperature = None
@@ -251,7 +241,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         """Update thermostat with latest state from humidity sensors."""
         try:
              # Calculate average temperature
-            avg_humidity = self._async_calculate_average_sensor_state(self._temperature_sensor_entity_ids)
+            avg_humidity = self._async_calculate_average_sensor_state(self._humidity_sensor_entity_ids)
             if not avg_humidity:
                 _LOGGER.warning("No valid humidity readings from any sensors")
                 return None

@@ -285,7 +285,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         
         if entity_id in self._temperature_sensor_entity_ids:
             self._async_update_temp(new_state)
-        elif entity_id in self._humidity_sensor_entity_ids:
+        elif self._humidity_sensor_entity_ids is not None and entity_id in self._humidity_sensor_entity_ids:
             self._async_update_humidity(new_state)
             
         self.async_write_ha_state()
@@ -473,7 +473,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             
             # Look for a lower priority switch that's currently off to turn ON first
             lower_priority_switch_to_turn_on = None
-            for i in range(my_position + 1, len(self._actuator_switches_entity_ids)):
+            for i in range(len(self._actuator_switches_entity_ids) - 1, my_position, -1):
                 switch_id = self._actuator_switches_entity_ids[i]
                 if switches_status.get(switch_id) == "off":
                     lower_priority_switch_to_turn_on = switch_id

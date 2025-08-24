@@ -57,21 +57,3 @@ def get_global_setting(hass: HomeAssistant, setting_key: str, default_value=None
     """Get a global setting value."""
     global_settings = hass.data.get(DOMAIN, {}).get(CONF_GLOBAL_SETTINGS, {})
     return global_settings.get(setting_key, default_value)
-
-
-def set_global_setting(hass: HomeAssistant, setting_key: str, value):
-    """Set a global setting value."""
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN].setdefault(CONF_GLOBAL_SETTINGS, {})
-    hass.data[DOMAIN][CONF_GLOBAL_SETTINGS][setting_key] = value
-
-
-def get_effective_setting(hass: HomeAssistant, config: dict, options: dict, setting_key: str, global_setting_key: str, default_value):
-    """Get the effective setting value, considering global settings preference."""
-    use_global_key = f"use_{global_setting_key}"
-    use_global = options.get(use_global_key, config.get(use_global_key, False))
-    
-    if use_global:
-        return get_global_setting(hass, global_setting_key, default_value)
-    else:
-        return options.get(setting_key, config.get(setting_key, default_value))

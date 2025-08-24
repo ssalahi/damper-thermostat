@@ -14,6 +14,7 @@ from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
 
+from . import get_global_setting
 from .const import (
     DOMAIN,
     CONF_TEMPERATURE_SENSOR,
@@ -99,6 +100,24 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     }
 )
 
+async def check_inside_global_actuator_switches(
+        hass: HomeAssistant, new_actuator_switches: list[str]
+        ) -> dict[str, str]:
+    """Update global actuator switches list with new switches if they don't exist."""
+    
+    errors = {}
+
+    # Get current global actuator switches
+    current_global_switches = get_global_setting(hass, CONF_GLOBAL_ACTUATOR_SWITCHES, [])
+    
+    # Add new switches that don't already exist
+    updated_global_switches = list(current_global_switches)
+    for switch in new_actuator_switches:
+        if switch not in updated_global_switches:
+            errors[CONF_ACTUATOR_SWITCH] = "actuator_switch_not_in_global"
+
+    return errors
+
 
 class DamperThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Damper Thermostat."""
@@ -110,10 +129,20 @@ class DamperThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle the initial step."""
-        return self.async_show_menu(
-            step_id="user",
-            menu_options=["device", CONF_GLOBAL_SETTINGS],
+        # Check if global settings already exist
+        existing_entries = self.hass.config_entries.async_entries(DOMAIN)
+        global_settings_entry = next(
+            (entry for entry in existing_entries 
+             if entry.data.get("entry_type") == CONF_GLOBAL_SETTINGS), 
+            None
         )
+        
+        if global_settings_entry is None:
+            # No global settings exist, redirect to global settings creation
+            return await self.async_step_global_settings(user_input)
+        else:
+            # Global settings exist, redirect to device creation
+            return await self.async_step_device(user_input)
 
     async def async_step_device(
         self, user_input: dict[str, Any] | None = None
@@ -129,9 +158,14 @@ class DamperThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
         # Validate temperature ranges
         errors.update(self._validate_temperature_ranges(user_input))
 
+        # Validate actuator switch
+        errors.update(await check_inside_global_actuator_switches(self.hass ,user_input[CONF_ACTUATOR_SWITCH]))
+
         if errors:
             return self.async_show_form(
-                step_id="device", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
+                step_id="device", 
+                data_schema=STEP_USER_DATA_SCHEMA, 
+                errors=errors
             )
 
         # Create a unique ID based on the actuator switch entity
@@ -167,7 +201,7 @@ class DamperThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
         # Create global settings entry
         user_input["entry_type"] = CONF_GLOBAL_SETTINGS
         await self.async_set_unique_id(f"{DOMAIN}_{CONF_GLOBAL_SETTINGS}")
-        self._abort_if_unique_id_configured(updates=user_input)
+        self._abort_if_unique_id_configured()
 
         return self.async_create_entry(title="Global Settings", data=user_input)
 
@@ -214,7 +248,6 @@ OPTIONS_SCHEMA = vol.Schema(
     }
 )
 
-
 class DamperThermostatOptionsFlow(OptionsFlowWithReload):
     """Handle options flow for Damper Thermostat."""
 
@@ -222,13 +255,64 @@ class DamperThermostatOptionsFlow(OptionsFlowWithReload):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage the options."""
+        # Check if this is a global settings entry or a device entry
+        is_global_settings = self.config_entry.data.get("entry_type") == CONF_GLOBAL_SETTINGS
+        
+        if is_global_settings:
+            return await self.async_step_global_settings(user_input)
+        else:
+            return await self.async_step_device(user_input)
+
+    async def async_step_global_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle global settings options."""
         if user_input is not None:
-            # Basic validation for temperature ranges
             errors = {}
+
+            # Validate temperature ranges
+            min_temp = user_input.get(CONF_GLOBAL_MIN_TEMP, DEFAULT_MIN_TEMP)
+            max_temp = user_input.get(CONF_GLOBAL_MAX_TEMP, DEFAULT_MAX_TEMP)
+            
+            if min_temp >= max_temp:
+                errors[CONF_GLOBAL_MIN_TEMP] = "min_temp_must_be_less_than_max_temp"
 
             if errors:
                 return self.async_show_form(
-                    step_id="init",
+                    step_id="global_settings",
+                    data_schema=self.add_suggested_values_to_schema(
+                        GLOBAL_SETTINGS_SCHEMA, user_input
+                    ),
+                    errors=errors,
+                )
+            
+            return self.async_create_entry(data=user_input)
+
+        # Merge current config data and options for suggested values
+        suggested_values = {**self.config_entry.data, **self.config_entry.options}
+        
+        return self.async_show_form(
+            step_id="global_settings",
+            data_schema=self.add_suggested_values_to_schema(
+                GLOBAL_SETTINGS_SCHEMA, suggested_values
+            ),
+        )
+
+    async def async_step_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle device options."""
+        if user_input is not None:
+            errors = {}
+
+            # Validate actuator switch
+            if CONF_ACTUATOR_SWITCH in user_input:
+                errors.update(await check_inside_global_actuator_switches(self.hass ,user_input[CONF_ACTUATOR_SWITCH]))
+
+            # Basic validation for temperature ranges
+            if errors:
+                return self.async_show_form(
+                    step_id="device",
                     data_schema=self.add_suggested_values_to_schema(
                         OPTIONS_SCHEMA, user_input
                     ),
@@ -243,14 +327,14 @@ class DamperThermostatOptionsFlow(OptionsFlowWithReload):
                 self.hass.config_entries.async_update_entry(
                     self.config_entry, title=user_input[CONF_NAME]
                 )
-            
+                        
             return self.async_create_entry(data=user_input)
 
         # Merge current config data and options for suggested values
         suggested_values = {**self.config_entry.data, **self.config_entry.options}
         
         return self.async_show_form(
-            step_id="init",
+            step_id="device",
             data_schema=self.add_suggested_values_to_schema(
                 OPTIONS_SCHEMA, suggested_values
             ),

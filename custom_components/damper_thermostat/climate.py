@@ -98,9 +98,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._actuator_switch_entity_ids = options.get(CONF_ACTUATOR_SWITCH, config[CONF_ACTUATOR_SWITCH])
         
         # Handle actuator switches list - use global settings
-        self._actuator_switches_entity_ids = get_global_setting(
-            hass, CONF_GLOBAL_ACTUATOR_SWITCHES, []
-        )
+        self._actuator_switches_entity_ids = get_global_setting(hass, CONF_GLOBAL_ACTUATOR_SWITCHES, [])
         if not isinstance(self._actuator_switches_entity_ids, list):
             self._actuator_switches_entity_ids = [self._actuator_switches_entity_ids] if self._actuator_switches_entity_ids else []
         

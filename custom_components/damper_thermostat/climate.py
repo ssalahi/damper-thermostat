@@ -177,14 +177,11 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         )
 
         # Check if we have a saved state
-        if (old_state := await self.async_get_last_state()) is not None:
-            # If we have no initial temperature, restore
-            if self._attr_target_temperature is None:
-                # If we have a previously saved temperature
-                if old_state.attributes.get(ATTR_TEMPERATURE) is None:
-                    self._attr_target_temperature = self.min_temp
-                else:
-                    self._attr_target_temperature = float(old_state.attributes[ATTR_TEMPERATURE])
+        old_state = await self.async_get_last_state()
+        if old_state is not None:
+            # Restore target_temperature available
+            if old_state.attributes.get(ATTR_TEMPERATURE) is not None:
+                self._attr_target_temperature = float(old_state.attributes[ATTR_TEMPERATURE])
 
             # Restore target_temperature_low if available
             if old_state.attributes.get(ATTR_TARGET_TEMP_LOW) is not None:
@@ -226,7 +223,9 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             # Calculate average temperature
             avg_temp = self._async_calculate_average_sensor_state(self._temperature_sensor_entity_ids)
             if not avg_temp:
-                _LOGGER.warning("No valid temperature readings from any sensors")
+                # Only log warning if this is not the initial startup call
+                if state is not None:
+                    _LOGGER.warning("No valid temperature readings from any sensors")
                 return None
             self._cur_temp = avg_temp
             self._attr_current_temperature = avg_temp
@@ -241,7 +240,9 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
              # Calculate average temperature
             avg_humidity = self._async_calculate_average_sensor_state(self._humidity_sensor_entity_ids)
             if not avg_humidity:
-                _LOGGER.warning("No valid humidity readings from any sensors")
+                # Only log warning if this is not the initial startup call
+                if state is not None:
+                    _LOGGER.warning("No valid humidity readings from any sensors")
                 return None
             self._cur_humidity = int(avg_humidity)
             self._attr_current_humidity = int(avg_humidity)
@@ -363,9 +364,9 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
 
             # Handle heat_cool mode
             if self._attr_hvac_mode == HVACMode.HEAT_COOL:
-                if main_mode == HVACMode.COOL:
+                if main_mode == HVACMode.COOL and main_action == HVACAction.COOLING:
                     enough_cold = self._attr_target_temperature_low >= (self._cur_temp + self._cold_tolerance)
-                if main_mode == HVACMode.HEAT:
+                if main_mode == HVACMode.HEAT and main_action in [HVACAction.HEATING, HVACAction.PREHEATING]:
                     enough_heat = self._attr_target_temperature_high <= (self._cur_temp - self._hot_tolerance)
             should_deactivate = should_deactivate or enough_cold or enough_heat
 

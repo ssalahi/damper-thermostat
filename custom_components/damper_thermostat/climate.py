@@ -48,6 +48,7 @@ from .const import (
     CONF_GLOBAL_MAX_SWITCHES_OFF,
     CONF_GLOBAL_MIN_TEMP,
     CONF_GLOBAL_MAX_TEMP,
+    CONF_REVERSE_HEAT_COOL_RANGE,
     DEFAULT_TOLERANCE,
     DEFAULT_MIN_TEMP,
     DEFAULT_MAX_TEMP,
@@ -135,6 +136,9 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             
         self._attr_hvac_modes = HVAC_MODES
         
+        # Reverse heat/cool range flag — initial/fallback value before switch entity publishes its state
+        self._initial_reverse_heat_cool_range = options.get(CONF_REVERSE_HEAT_COOL_RANGE, config.get(CONF_REVERSE_HEAT_COOL_RANGE, False))
+
         # Control variables
         self._active = False
         self._cur_temp = None
@@ -207,6 +211,9 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         
         # Set initial main thermostat state
         self._async_update_main_thermostat_state(None)
+
+        # Register callback so the reverse switch entity can trigger re-control
+        self.hass.data[DOMAIN][f"{self._entry_id}_on_reverse_change"] = self._async_control_heating_cooling
 
         # Call control logic on startup
         if self.hass.state == "running":
@@ -365,9 +372,15 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             # Handle heat_cool mode
             if self._attr_hvac_mode == HVACMode.HEAT_COOL:
                 if main_mode == HVACMode.COOL and main_action == HVACAction.COOLING:
-                    enough_cold = self._attr_target_temperature_low >= (self._cur_temp + self._cold_tolerance)
+                    if self._reverse_heat_cool_range:
+                        enough_cold = self._attr_target_temperature_high >= (self._cur_temp + self._cold_tolerance)
+                    else:
+                        enough_cold = self._attr_target_temperature_low >= (self._cur_temp + self._cold_tolerance)
                 if main_mode == HVACMode.HEAT and main_action in [HVACAction.HEATING, HVACAction.PREHEATING]:
-                    enough_heat = self._attr_target_temperature_high <= (self._cur_temp - self._hot_tolerance)
+                    if self._reverse_heat_cool_range:
+                        enough_heat = self._attr_target_temperature_low <= (self._cur_temp - self._hot_tolerance)
+                    else:
+                        enough_heat = self._attr_target_temperature_high <= (self._cur_temp - self._hot_tolerance)
             should_deactivate = should_deactivate or enough_cold or enough_heat
 
             # Handle heat and cool modes
@@ -543,6 +556,14 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         if task.exception():
             _LOGGER.error("Control task failed: %s", task.exception())
     
+    @property
+    def _reverse_heat_cool_range(self) -> bool:
+        """Return current value of the Reverse Heat/Cool Range toggle from hass.data."""
+        return self.hass.data[DOMAIN].get(
+            f"{self._entry_id}_reverse_heat_cool_range",
+            self._initial_reverse_heat_cool_range,
+        )
+
     @property
     def supported_features(self) -> float | None:
         """Return supported feature based on HVACMode"""

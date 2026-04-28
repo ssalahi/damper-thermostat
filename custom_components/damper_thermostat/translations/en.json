@@ -64,19 +64,20 @@
           "global_max_temp": "Global Maximum Temperature"
         }
       },
-      "device": {
-        "title": "Device Options",
-        "description": "Update device configuration for {name}",
-        "data": {
-          "name": "Name",
-          "temperature_sensor": "Temperature Sensor(s)",
-          "humidity_sensor": "Humidity Sensor (Optional)",
-          "actuator_switch": "Actuator Switch",
-          "main_thermostat": "Main Thermostat",
-          "cold_tolerance": "Cold Tolerance",
-          "hot_tolerance": "Hot Tolerance"
+        "device": {
+          "title": "Device Options",
+          "description": "Update device configuration for {name}",
+          "data": {
+            "name": "Name",
+            "temperature_sensor": "Temperature Sensor(s)",
+            "humidity_sensor": "Humidity Sensor (Optional)",
+            "actuator_switch": "Actuator Switch",
+            "main_thermostat": "Main Thermostat",
+            "cold_tolerance": "Cold Tolerance",
+            "hot_tolerance": "Hot Tolerance",
+            "reverse_heat_cool_range": "Reverse Heat/Cool Range"
+          }
         }
-      }
     },
     "error": {
       "entity_not_found": "Entity not found",

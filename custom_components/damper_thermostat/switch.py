@@ -106,3 +106,7 @@ class DamperThermostatReverseSwitch(SwitchEntity, RestoreEntity):
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
         )
+    
+    @property
+    def icon(self):
+        return "mdi:rotate-right"

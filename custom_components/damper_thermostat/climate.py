@@ -373,14 +373,14 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             if self._attr_hvac_mode == HVACMode.HEAT_COOL:
                 if main_mode == HVACMode.COOL and main_action == HVACAction.COOLING:
                     if self._reverse_heat_cool_range:
-                        enough_cold = self._attr_target_temperature_high >= (self._cur_temp + self._cold_tolerance)
-                    else:
                         enough_cold = self._attr_target_temperature_low >= (self._cur_temp + self._cold_tolerance)
+                    else:
+                        enough_cold = self._attr_target_temperature_high >= (self._cur_temp + self._cold_tolerance)
                 if main_mode == HVACMode.HEAT and main_action in [HVACAction.HEATING, HVACAction.PREHEATING]:
                     if self._reverse_heat_cool_range:
-                        enough_heat = self._attr_target_temperature_low <= (self._cur_temp - self._hot_tolerance)
-                    else:
                         enough_heat = self._attr_target_temperature_high <= (self._cur_temp - self._hot_tolerance)
+                    else:
+                        enough_heat = self._attr_target_temperature_low <= (self._cur_temp - self._hot_tolerance)
             should_deactivate = should_deactivate or enough_cold or enough_heat
 
             # Handle heat and cool modes

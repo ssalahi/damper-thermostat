@@ -33,6 +33,8 @@ from .const import (
     CONF_GLOBAL_MIN_TEMP,
     CONF_GLOBAL_MAX_TEMP,
     CONF_REVERSE_HEAT_COOL_RANGE,
+    CONF_HEAT_FAN_MODE,
+    CONF_COLD_FAN_MODE,
     DEFAULT_TOLERANCE,
     DEFAULT_MIN_TEMP,
     DEFAULT_MAX_TEMP,
@@ -246,6 +248,18 @@ OPTIONS_SCHEMA = vol.Schema(
         vol.Optional(CONF_HOT_TOLERANCE): vol.All(
             vol.Coerce(float), vol.Range(min=0.1, max=10.0)
         ),
+        vol.Optional(CONF_HEAT_FAN_MODE, default="Auto"): selector.selector({
+            "select": {
+                "options": ["Auto", "Off"],
+                "mode": "dropdown",
+            }
+        }),
+        vol.Optional(CONF_COLD_FAN_MODE, default="Auto"): selector.selector({
+            "select": {
+                "options": ["Auto", "Off"],
+                "mode": "dropdown",
+            }
+        }),
     }
 )
 

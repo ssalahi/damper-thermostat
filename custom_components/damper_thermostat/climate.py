@@ -49,6 +49,8 @@ from .const import (
     CONF_GLOBAL_MIN_TEMP,
     CONF_GLOBAL_MAX_TEMP,
     CONF_REVERSE_HEAT_COOL_RANGE,
+    CONF_HEAT_FAN_MODE,
+    CONF_COLD_FAN_MODE,
     DEFAULT_TOLERANCE,
     DEFAULT_MIN_TEMP,
     DEFAULT_MAX_TEMP,
@@ -138,6 +140,10 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         
         # Reverse heat/cool range flag — initial/fallback value before switch entity publishes its state
         self._initial_reverse_heat_cool_range = options.get(CONF_REVERSE_HEAT_COOL_RANGE, config.get(CONF_REVERSE_HEAT_COOL_RANGE, False))
+
+        # Fan mode flags — initial/fallback values before select entities publish their states
+        self._initial_heat_fan_mode = options.get(CONF_HEAT_FAN_MODE, config.get(CONF_HEAT_FAN_MODE, "Auto"))
+        self._initial_cold_fan_mode = options.get(CONF_COLD_FAN_MODE, config.get(CONF_COLD_FAN_MODE, "Auto"))
 
         # Control variables
         self._active = False
@@ -369,6 +375,12 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             if self._attr_hvac_mode == HVACMode.HEAT and main_mode == HVACMode.COOL:
                 should_deactivate = True
 
+            # Fan Mode checks: if fan mode is Off and main thermostat is in matching mode, deactivate
+            if main_mode == HVACMode.HEAT and main_action == HVACAction.FAN and self._heat_fan_mode == "Off":
+                should_deactivate = True
+            if main_mode == HVACMode.COOL and main_action == HVACAction.FAN and self._cold_fan_mode == "Off":
+                should_deactivate = True
+
             # Handle heat_cool mode
             if self._attr_hvac_mode == HVACMode.HEAT_COOL:
                 if main_mode == HVACMode.COOL and main_action == HVACAction.COOLING:
@@ -562,6 +574,22 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         return self.hass.data[DOMAIN].get(
             f"{self._entry_id}_reverse_heat_cool_range",
             self._initial_reverse_heat_cool_range,
+        )
+
+    @property
+    def _heat_fan_mode(self) -> str:
+        """Return current value of the Heat Fan Mode select from hass.data ('Auto' or 'Off')."""
+        return self.hass.data[DOMAIN].get(
+            f"{self._entry_id}_{CONF_HEAT_FAN_MODE}",
+            self._initial_heat_fan_mode,
+        )
+
+    @property
+    def _cold_fan_mode(self) -> str:
+        """Return current value of the Cold Fan Mode select from hass.data ('Auto' or 'Off')."""
+        return self.hass.data[DOMAIN].get(
+            f"{self._entry_id}_{CONF_COLD_FAN_MODE}",
+            self._initial_cold_fan_mode,
         )
 
     @property

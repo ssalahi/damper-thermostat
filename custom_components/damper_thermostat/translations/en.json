@@ -75,7 +75,9 @@
             "main_thermostat": "Main Thermostat",
             "cold_tolerance": "Cold Tolerance",
             "hot_tolerance": "Hot Tolerance",
-            "reverse_heat_cool_range": "Reverse Heat/Cool Range"
+            "reverse_heat_cool_range": "Reverse Heat/Cool Range",
+            "heat_fan_mode": "Heat Fan Mode",
+            "cold_fan_mode": "Cold Fan Mode"
           }
         }
     },

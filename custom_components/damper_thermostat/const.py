@@ -29,6 +29,8 @@ CONF_TARGET_TEMP_LOW = "target_temp_low"
 CONF_TARGET_TEMP_HIGH = "target_temp_high"
 CONF_INITIAL_HVAC_MODE = "initial_hvac_mode"
 CONF_REVERSE_HEAT_COOL_RANGE = "reverse_heat_cool_range"
+CONF_HEAT_FAN_MODE = "heat_fan_mode"
+CONF_COLD_FAN_MODE = "cold_fan_mode"
 
 # Default values
 DEFAULT_TOLERANCE = 0.5

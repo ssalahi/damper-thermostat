@@ -621,6 +621,23 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             return "mdi:thermostat"
 
     @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the diagnostic state attributes."""
+        # Actuator switch status
+        actuator_status = "Close"
+        for switch_id in self._actuator_switch_entity_ids:
+            state = self.hass.states.get(switch_id)
+            if state is not None and state.state == "on":
+                actuator_status = "Open"
+                break
+
+        return {
+            "actuator_switch": actuator_status,
+            "cold_tolerance": self._cold_tolerance,
+            "hot_tolerance": self._hot_tolerance,
+        }
+
+    @property
     def device_info(self) -> DeviceInfo:
         """Return device information about this thermostat."""
         return DeviceInfo(

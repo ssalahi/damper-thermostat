@@ -40,6 +40,8 @@ async def async_setup_entry(
     actuator_switch_entity_ids = options.get(
         CONF_ACTUATOR_SWITCH, config[CONF_ACTUATOR_SWITCH]
     )
+    if not isinstance(actuator_switch_entity_ids, list):
+        actuator_switch_entity_ids = [actuator_switch_entity_ids] if actuator_switch_entity_ids else []
 
     cold_tolerance = options.get(
         CONF_COLD_TOLERANCE, config.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)
@@ -68,22 +70,14 @@ class DamperThermostatActuatorSensor(SensorEntity):
         self._attr_unique_id = f"{DOMAIN}_{entry_id}_actuator_status"
         self._attr_name = "Actuator Switch"
         self._attr_icon = "mdi:valve"
-
-        # Determine initial state
-        self._update_state()
-
-    def _update_state(self) -> None:
-        """Read current actuator switch states and update native_value."""
-        for switch_id in self._actuator_switch_entity_ids:
-            state = self.hass.states.get(switch_id)
-            if state is not None and state.state == "on":
-                self._attr_native_value = "Open"
-                return
         self._attr_native_value = "Close"
 
     async def async_added_to_hass(self) -> None:
         """Run when entity is added to hass."""
         await super().async_added_to_hass()
+
+        # Determine initial state now that hass is available
+        self._update_state()
 
         # Subscribe to actuator switch state changes
         self.async_on_remove(
@@ -105,6 +99,15 @@ class DamperThermostatActuatorSensor(SensorEntity):
 
         self._update_state()
         self.async_write_ha_state()
+
+    def _update_state(self) -> None:
+        """Read current actuator switch states and update native_value."""
+        for switch_id in self._actuator_switch_entity_ids:
+            state = self.hass.states.get(switch_id)
+            if state is not None and state.state == "on":
+                self._attr_native_value = "Open"
+                return
+        self._attr_native_value = "Close"
 
     @property
     def device_info(self) -> DeviceInfo:

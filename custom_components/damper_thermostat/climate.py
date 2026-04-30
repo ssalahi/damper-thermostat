@@ -367,6 +367,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             # Deciding based on the low/high target temp and main thermostat current state
             # and our temperature to know if actuator needs to be closed or not
             should_deactivate = False
+            should_deactivate_for_fan = False
             enough_cold = False
             enough_heat = False
             
@@ -378,9 +379,10 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
 
             # Fan Mode checks: if fan mode is Off and main thermostat is in matching mode, deactivate
             if main_mode == HVACMode.HEAT and main_action == HVACAction.FAN and self._heat_fan_mode == FanMode.OFF:
-                should_deactivate = True
+                should_deactivate_for_fan = True
             if main_mode == HVACMode.COOL and main_action == HVACAction.FAN and self._cold_fan_mode == FanMode.OFF:
-                should_deactivate = True
+                should_deactivate_for_fan = True
+            should_deactivate = should_deactivate or should_deactivate_for_fan
 
             # Handle heat_cool mode
             if self._attr_hvac_mode == HVACMode.HEAT_COOL:

@@ -51,6 +51,7 @@ from .const import (
     CONF_REVERSE_HEAT_COOL_RANGE,
     CONF_HEAT_FAN_MODE,
     CONF_COLD_FAN_MODE,
+    FanMode,
     DEFAULT_TOLERANCE,
     DEFAULT_MIN_TEMP,
     DEFAULT_MAX_TEMP,
@@ -142,8 +143,8 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._initial_reverse_heat_cool_range = options.get(CONF_REVERSE_HEAT_COOL_RANGE, config.get(CONF_REVERSE_HEAT_COOL_RANGE, False))
 
         # Fan mode flags — initial/fallback values before select entities publish their states
-        self._initial_heat_fan_mode = options.get(CONF_HEAT_FAN_MODE, config.get(CONF_HEAT_FAN_MODE, "Auto"))
-        self._initial_cold_fan_mode = options.get(CONF_COLD_FAN_MODE, config.get(CONF_COLD_FAN_MODE, "Auto"))
+        self._initial_heat_fan_mode = options.get(CONF_HEAT_FAN_MODE, config.get(CONF_HEAT_FAN_MODE, FanMode.AUTO))
+        self._initial_cold_fan_mode = options.get(CONF_COLD_FAN_MODE, config.get(CONF_COLD_FAN_MODE, FanMode.AUTO))
 
         # Control variables
         self._active = False
@@ -376,9 +377,9 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
                 should_deactivate = True
 
             # Fan Mode checks: if fan mode is Off and main thermostat is in matching mode, deactivate
-            if main_mode == HVACMode.HEAT and main_action == HVACAction.FAN and self._heat_fan_mode == "Off":
+            if main_mode == HVACMode.HEAT and main_action == HVACAction.FAN and self._heat_fan_mode == FanMode.OFF:
                 should_deactivate = True
-            if main_mode == HVACMode.COOL and main_action == HVACAction.FAN and self._cold_fan_mode == "Off":
+            if main_mode == HVACMode.COOL and main_action == HVACAction.FAN and self._cold_fan_mode == FanMode.OFF:
                 should_deactivate = True
 
             # Handle heat_cool mode

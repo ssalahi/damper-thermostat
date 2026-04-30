@@ -17,11 +17,12 @@ from .const import (
     CONF_GLOBAL_SETTINGS,
     CONF_HEAT_FAN_MODE,
     CONF_COLD_FAN_MODE,
+    FanMode,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-FAN_MODE_OPTIONS = ["Auto", "Off"]
+FAN_MODE_OPTIONS: list[str] = [FanMode.AUTO.value, FanMode.SMART.value, FanMode.OFF.value]
 
 
 async def async_setup_entry(
@@ -39,11 +40,11 @@ async def async_setup_entry(
 
     heat_fan_initial = options.get(
         CONF_HEAT_FAN_MODE,
-        config.get(CONF_HEAT_FAN_MODE, "Auto")
+        config.get(CONF_HEAT_FAN_MODE, FanMode.AUTO)
     )
     cold_fan_initial = options.get(
         CONF_COLD_FAN_MODE,
-        config.get(CONF_COLD_FAN_MODE, "Auto")
+        config.get(CONF_COLD_FAN_MODE, FanMode.AUTO)
     )
 
     async_add_entities([
@@ -57,14 +58,14 @@ class DamperThermostatHeatFanModeSelect(SelectEntity, RestoreEntity):
 
     _attr_entity_category = EntityCategory.CONFIG
     _attr_has_entity_name = True
-    _attr_options = FAN_MODE_OPTIONS
+    _attr_options: list[str] = FAN_MODE_OPTIONS
 
     def __init__(self, entry_id: str, initial_value: str) -> None:
         """Initialize the select."""
         self._entry_id = entry_id
         self._attr_unique_id = f"{DOMAIN}_{entry_id}_{CONF_HEAT_FAN_MODE}"
         self._attr_name = "Heat Fan Mode"
-        self._attr_current_option = initial_value if initial_value in FAN_MODE_OPTIONS else "Auto"
+        self._attr_current_option = initial_value if initial_value in FAN_MODE_OPTIONS else FanMode.AUTO
 
     async def async_added_to_hass(self) -> None:
         """Run when entity is added to hass."""
@@ -116,7 +117,7 @@ class DamperThermostatHeatFanModeSelect(SelectEntity, RestoreEntity):
 
     @property
     def icon(self):
-        return "mdi:fan" if self._attr_current_option == "Auto" else "mdi:fan-off"
+        return "mdi:fan" if self._attr_current_option == FanMode.AUTO else "mdi:fan-off"
 
 
 class DamperThermostatColdFanModeSelect(SelectEntity, RestoreEntity):
@@ -124,14 +125,14 @@ class DamperThermostatColdFanModeSelect(SelectEntity, RestoreEntity):
 
     _attr_entity_category = EntityCategory.CONFIG
     _attr_has_entity_name = True
-    _attr_options = FAN_MODE_OPTIONS
+    _attr_options: list[str] = FAN_MODE_OPTIONS
 
     def __init__(self, entry_id: str, initial_value: str) -> None:
         """Initialize the select."""
         self._entry_id = entry_id
         self._attr_unique_id = f"{DOMAIN}_{entry_id}_{CONF_COLD_FAN_MODE}"
         self._attr_name = "Cold Fan Mode"
-        self._attr_current_option = initial_value if initial_value in FAN_MODE_OPTIONS else "Auto"
+        self._attr_current_option = initial_value if initial_value in FAN_MODE_OPTIONS else FanMode.AUTO
 
     async def async_added_to_hass(self) -> None:
         """Run when entity is added to hass."""
@@ -183,4 +184,4 @@ class DamperThermostatColdFanModeSelect(SelectEntity, RestoreEntity):
 
     @property
     def icon(self):
-        return "mdi:snowflake-thermometer" if self._attr_current_option == "Auto" else "mdi:snowflake-off"
+        return "mdi:snowflake-thermometer" if self._attr_current_option == FanMode.AUTO else "mdi:snowflake-off"

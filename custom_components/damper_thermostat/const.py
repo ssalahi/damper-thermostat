@@ -1,4 +1,6 @@
 """Constants for the Damper Thermostat integration."""
+from enum import Enum
+
 from homeassistant.components.climate.const import (
     HVACMode,
     ClimateEntityFeature,
@@ -9,6 +11,14 @@ from homeassistant.const import (
 )
 
 DOMAIN = "damper_thermostat"
+
+
+class FanMode(str, Enum):
+    """Fan mode options for the damper thermostat."""
+
+    AUTO = "Auto"
+    SMART = "Smart"
+    OFF = "Off"
 
 # Global configuration keys
 CONF_GLOBAL_SETTINGS = "global_settings"

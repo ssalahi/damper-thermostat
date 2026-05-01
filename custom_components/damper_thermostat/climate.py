@@ -382,20 +382,18 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
                 if self._heat_fan_mode == FanMode.OFF:
                     should_deactivate_for_fan = True
                 elif self._heat_fan_mode == FanMode.SMART:
-                    if self._reverse_heat_cool_range:
-                        if self._attr_target_temperature_high <= (self._cur_temp - self._hot_tolerance):
-                            should_deactivate_for_fan = True
-                        elif self._attr_target_temperature_low <= (self._cur_temp - self._hot_tolerance):
-                            should_deactivate_for_fan = True
+                    if self._reverse_heat_cool_range and self._attr_target_temperature_high <= (self._cur_temp - self._hot_tolerance):
+                        should_deactivate_for_fan = True
+                    elif not self._reverse_heat_cool_range and self._attr_target_temperature_low <= (self._cur_temp - self._hot_tolerance):
+                        should_deactivate_for_fan = True
             if main_mode == HVACMode.COOL and main_action == HVACAction.FAN:
-                if self._heat_fan_mode == FanMode.OFF:
+                if self._cold_fan_mode == FanMode.OFF:
                     should_deactivate_for_fan = True
-                elif self._heat_fan_mode == FanMode.SMART:
-                    if self._reverse_heat_cool_range:
-                        if self._attr_target_temperature_low >= (self._cur_temp + self._cold_tolerance):
-                            should_deactivate_for_fan = True
-                        elif self._attr_target_temperature_high >= (self._cur_temp + self._cold_tolerance):
-                            should_deactivate_for_fan = True
+                elif self._cold_fan_mode == FanMode.SMART:
+                    if self._reverse_heat_cool_range and self._attr_target_temperature_low >= (self._cur_temp + self._cold_tolerance):
+                        should_deactivate_for_fan = True
+                    elif not self._reverse_heat_cool_range and self._attr_target_temperature_high >= (self._cur_temp + self._cold_tolerance):
+                        should_deactivate_for_fan = True
             should_deactivate = should_deactivate or should_deactivate_for_fan
 
             # Handle heat_cool mode

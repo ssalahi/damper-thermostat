@@ -1,7 +1,7 @@
 """The Damper Thermostat integration."""
 from __future__ import annotations
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
@@ -25,9 +25,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     
     # Check if this is a global settings entry
-    if entry.data.get("entry_type") == "global_settings":
-        # Store global settings
-        hass.data[DOMAIN][CONF_GLOBAL_SETTINGS] = entry.data
+    if entry.data.get("entry_type") == CONF_GLOBAL_SETTINGS:
+        # Options (edited via the options flow) override the original data
+        hass.data[DOMAIN][CONF_GLOBAL_SETTINGS] = {**entry.data, **entry.options}
+
+        # Device entities read global settings only at construction, so reload
+        # any already-loaded device entries to pick up the new values. This also
+        # covers devices that were set up before this entry and got defaults.
+        for other in hass.config_entries.async_entries(DOMAIN):
+            if (
+                other.entry_id != entry.entry_id
+                and other.data.get("entry_type") != CONF_GLOBAL_SETTINGS
+                and other.state is ConfigEntryState.LOADED
+            ):
+                hass.config_entries.async_schedule_reload(other.entry_id)
         return True
     
     # Initialize global settings with defaults if not present
@@ -47,6 +58,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    if entry.data.get("entry_type") == CONF_GLOBAL_SETTINGS:
+        # No platforms were forwarded for the global entry; keep the stored
+        # settings so loaded devices still see them until setup runs again.
+        return True
+
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
 

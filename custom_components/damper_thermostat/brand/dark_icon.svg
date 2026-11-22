@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="22 -9.05 468 468">
+  <title>Damper Thermostat</title>
+  <path d="M106.09,405.91 A212,212 0 0,1 224.66,46.33" fill="none" stroke="#FF7020" stroke-width="44" stroke-linecap="round"/>
+  <path d="M287.34,46.33 A212,212 0 0,1 405.91,405.91" fill="none" stroke="#1E88E5" stroke-width="44" stroke-linecap="round"/>
+  <path fill="#1E88E5" fill-rule="evenodd" d="M363.86,98.45 a34,34 0 1,0 68,0 a34,34 0 1,0 -68,0 Z M382.86,98.45 a15,15 0 1,0 30,0 a15,15 0 1,0 -30,0 Z"/>
+  <g fill="none" stroke="#B0BEC5" stroke-linecap="round">
+    <rect x="142.0" y="142.0" width="228.0" height="228.0" rx="50" stroke-width="24"/>
+    <line x1="185.52" y1="229.65" x2="326.48" y2="178.35" stroke-width="24"/>
+    <line x1="185.52" y1="281.65" x2="326.48" y2="230.35" stroke-width="24"/>
+    <line x1="185.52" y1="333.65" x2="326.48" y2="282.35" stroke-width="24"/>
+  </g>
+</svg>

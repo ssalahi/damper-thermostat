@@ -24,7 +24,8 @@ Project context for working in this repository.
 | [custom_components/damper_thermostat/select.py](custom_components/damper_thermostat/select.py) | CONFIG selects "Heat Fan Mode" and "Cold Fan Mode" |
 | [custom_components/damper_thermostat/sensor.py](custom_components/damper_thermostat/sensor.py) | DIAGNOSTIC sensors: actuator Open/Close, cold tolerance, hot tolerance |
 | `translations/en.json` | UI strings for the config and options steps |
-| `brand/`, `images/`, `icon.png` | Icons |
+| `custom_components/damper_thermostat/brand/` | Icons Home Assistant shows: `icon.png` (256), `icon@2x.png` (512), `dark_icon*.png`, plus SVG sources. The design is a louvered damper inside a split warm/cool thermostat dial with a setpoint knob. Duct grey `#455A64` (dark theme `#B0BEC5`), warm `#FF7020`, cool `#1E88E5`. |
+| `images/icon.png`, `images/icon.svg`, `custom_components/damper_thermostat/icon.png` | Copies of the same icon (not referenced anywhere) |
 | `README.md`, `SETUP_GUIDE.md`, `info.md` | User docs (`info.md` is the short HACS summary) |
 | `custom_components/damper_thermostat/CONFIG_FLOW_README.md` | Developer notes on the config and options flows |
 | `install.sh` | Manual install. Copies the component into `<ha-config>/custom_components/` |
@@ -73,7 +74,7 @@ Restored on restart (`RestoreEntity`): target, low and high setpoints, HVAC mode
 
 - Global settings are stored as `{**entry.data, **entry.options}`. Device entities read them only once, at construction. So whenever the global entry is set up or reloaded (for example after an options edit), it schedules a reload of every device entry that is already loaded. Unloading the global entry returns early because it has no platforms.
 - `hacs.json` declares `"filename": "damper_thermostat.zip"` (release-zip install) and lists `domains: ["climate"]` only.
-- `manifest.json` `version` and `DeviceInfo.sw_version` are both `1.0.0` in code. Bump both together.
+- `manifest.json` `version` and `DeviceInfo.sw_version` are both `1.0.2` in code. Bump both together, and keep the README changelog in step with GitHub releases (tags look like `V1.0.1`).
 - The select icons only distinguish `Auto` from everything else, so `Smart` shows the "off" icon.
 - `translations/en.json` lists options-flow fields (`reverse_heat_cool_range`, `heat_fan_mode`, `cold_fan_mode`) that are no longer in `OPTIONS_SCHEMA`. They moved to entities.
 - All `.md` docs were rewritten on 2026-11-21 to match the code. When behavior changes, update the README's mode, fan and damper-limit tables, its **Known limitations** section, and `CONFIG_FLOW_README.md`.

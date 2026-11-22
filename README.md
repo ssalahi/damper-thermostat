@@ -234,7 +234,11 @@ Please [open an issue](https://github.com/ssalahi/damper-thermostat/issues) on G
 
 ## Changelog
 
-### Unreleased
+### 1.0.2 (unreleased)
+- New icon (a louvered damper inside a warm/cool thermostat dial) with light and dark versions at the sizes Home Assistant expects
+- `install.sh` now installs the `translations/` and `brand/` folders and works from any directory
+
+### 1.0.1
 - Global Settings entry: a shared damper priority list, the damper limit, and min/max setpoints
 - Reverse Heat/Cool Range switch per zone
 - Heat Fan Mode and Cold Fan Mode selects (`Auto`, `Smart`, `Off`)

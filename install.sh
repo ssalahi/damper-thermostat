@@ -56,12 +56,15 @@ fi
 # Create component directory
 mkdir -p "$COMPONENT_DIR"
 
-# Copy component files
+# Copy component files, including subfolders (translations/, brand/)
 echo "Copying component files..."
-cp custom_components/damper_thermostat/* "$COMPONENT_DIR/"
+SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)/custom_components/damper_thermostat"
+cp -R "$SOURCE_DIR/." "$COMPONENT_DIR/"
+rm -rf "$COMPONENT_DIR/__pycache__"
 
-# Set permissions
-chmod 644 "$COMPONENT_DIR"/*
+# Set permissions: folders must stay traversable
+find "$COMPONENT_DIR" -type d -exec chmod 755 {} +
+find "$COMPONENT_DIR" -type f -exec chmod 644 {} +
 
 echo -e "${GREEN}Installation completed successfully!${NC}"
 echo ""

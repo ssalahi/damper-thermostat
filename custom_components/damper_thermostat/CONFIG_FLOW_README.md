@@ -25,8 +25,8 @@ The config flow allows users to configure the Damper Thermostat integration thro
 ### Optional Options
 - **Humidity Sensor**: Optional humidity sensor for enhanced control
 - **Main Thermostat**: Optional main thermostat for coordination
-- **Cold Tolerance**: Temperature tolerance for heating mode (default: 0.5°F)
-- **Hot Tolerance**: Temperature tolerance for cooling mode (default: 0.5°F)
+- **Cold Tolerance**: While cooling, how far below the target the zone must drop before its damper closes (default: 0.5°F)
+- **Hot Tolerance**: While heating, how far above the target the zone must rise before its damper closes (default: 0.5°F)
 - **Minimum Temperature**: Lower temperature limit (default: 60°F)
 - **Maximum Temperature**: Upper temperature limit (default: 80°F)
 - **Initial Target Temperature**: Starting target temperature (default: 74°F)

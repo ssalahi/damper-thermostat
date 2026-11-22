@@ -20,6 +20,10 @@
           "target_temp_low": "Target Temperature Low",
           "target_temp_high": "Target Temperature High",
           "initial_hvac_mode": "Initial HVAC Mode"
+        },
+        "data_description": {
+          "cold_tolerance": "While cooling, how far below the target the zone must drop before its damper closes.",
+          "hot_tolerance": "While heating, how far above the target the zone must rise before its damper closes."
         }
       },
       "global_settings": {
@@ -64,22 +68,26 @@
           "global_max_temp": "Global Maximum Temperature"
         }
       },
-        "device": {
-          "title": "Device Options",
-          "description": "Update device configuration for {name}",
-          "data": {
-            "name": "Name",
-            "temperature_sensor": "Temperature Sensor(s)",
-            "humidity_sensor": "Humidity Sensor (Optional)",
-            "actuator_switch": "Actuator Switch",
-            "main_thermostat": "Main Thermostat",
-            "cold_tolerance": "Cold Tolerance",
-            "hot_tolerance": "Hot Tolerance",
-            "reverse_heat_cool_range": "Reverse Heat/Cool Range",
-            "heat_fan_mode": "Heat Fan Mode",
-            "cold_fan_mode": "Cold Fan Mode"
-          }
+      "device": {
+        "title": "Device Options",
+        "description": "Update device configuration for {name}",
+        "data": {
+          "name": "Name",
+          "temperature_sensor": "Temperature Sensor(s)",
+          "humidity_sensor": "Humidity Sensor (Optional)",
+          "actuator_switch": "Actuator Switch",
+          "main_thermostat": "Main Thermostat",
+          "cold_tolerance": "Cold Tolerance",
+          "hot_tolerance": "Hot Tolerance",
+          "reverse_heat_cool_range": "Reverse Heat/Cool Range",
+          "heat_fan_mode": "Heat Fan Mode",
+          "cold_fan_mode": "Cold Fan Mode"
+        },
+        "data_description": {
+          "cold_tolerance": "While cooling, how far below the target the zone must drop before its damper closes.",
+          "hot_tolerance": "While heating, how far above the target the zone must rise before its damper closes."
         }
+      }
     },
     "error": {
       "entity_not_found": "Entity not found",

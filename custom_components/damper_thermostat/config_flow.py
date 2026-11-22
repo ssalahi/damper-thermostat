@@ -322,6 +322,11 @@ class DamperThermostatOptionsFlow(OptionsFlowWithReload):
                     },
                 )
             
+            # A cleared optional selector is omitted from user_input, which would
+            # make the entity fall back to the sensor from the original setup.
+            # Store an explicit empty list so removing the sensor sticks.
+            user_input.setdefault(CONF_HUMIDITY_SENSOR, [])
+
             # Update the config entry title if name changed
             if user_input.get(CONF_NAME) and user_input[CONF_NAME] != self.config_entry.title:
                 self.hass.config_entries.async_update_entry(

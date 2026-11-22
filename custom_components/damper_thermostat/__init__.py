@@ -64,7 +64,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return True
 
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id)
+        domain_data = hass.data[DOMAIN]
+        domain_data.pop(entry.entry_id, None)
+        # Drop per-entry state shared between platforms (switch/select values
+        # and the climate re-control callback) so nothing points at removed
+        # entities. Switch/select restore their values on the next setup.
+        prefix = f"{entry.entry_id}_"
+        for key in [k for k in domain_data if k.startswith(prefix)]:
+            del domain_data[key]
 
     return unload_ok
 

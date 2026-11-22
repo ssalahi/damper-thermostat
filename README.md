@@ -94,7 +94,7 @@ Before setting up the integration, ensure you have:
 
 #### Optional Configuration
 - **Humidity Sensor**: Select a humidity sensor for the zone
-- **Cold/Hot Tolerance**: Temperature difference before damper activates
+- **Cold/Hot Tolerance**: How far past the target the zone may go before its damper closes (cold while cooling, hot while heating)
 - **Temperature Limits**: Minimum and maximum settable temperatures
 - **Initial Settings**: Starting target temperature and HVAC mode
 
@@ -109,8 +109,8 @@ Before setting up the integration, ensure you have:
 | Main Thermostat | Yes | Main HVAC thermostat entity ID | - |
 | Actuator Switches | Yes | List of all damper switches for priority management | - |
 | Max Switches Off | Yes | Maximum dampers that can be closed | 3 |
-| Cold Tolerance | No | Temperature difference before heating | 0.5°F |
-| Hot Tolerance | No | Temperature difference before cooling | 0.5°F |
+| Cold Tolerance | No | While cooling, how far below the target the zone must drop before its damper closes | 0.5°F |
+| Hot Tolerance | No | While heating, how far above the target the zone must rise before its damper closes | 0.5°F |
 | Min/Max Temperature | No | Temperature range limits | 60-80°F |
 | Initial Target Temperature | No | Starting target temperature | 74°F |
 | Initial HVAC Mode | No | Starting HVAC mode | Off |

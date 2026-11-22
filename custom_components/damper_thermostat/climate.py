@@ -687,5 +687,5 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             name=self._attr_name,
             manufacturer="SSalahi",
             model="Smart Damper Thermostat",
-            sw_version="1.0.0"
+            sw_version="1.0.2"
         )

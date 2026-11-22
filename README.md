@@ -3,227 +3,216 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 [![GitHub release](https://img.shields.io/github/release/ssalahi/damper-thermostat.svg)](https://github.com/ssalahi/damper-thermostat/releases)
 
-A sophisticated Home Assistant custom component that creates an intelligent damper thermostat system with advanced zone control capabilities. This component is designed for HVAC systems with multiple zones and dampers, providing coordinated temperature control that works in harmony with your main thermostat system.
+A Home Assistant custom integration for zoned HVAC systems that use motorized duct dampers. Each zone gets its own virtual thermostat. That thermostat follows your **main thermostat** and opens or closes the zone's **damper switches**, based on the zone's own temperature and what the main system is doing.
 
-## What is a Damper Thermostat?
+The integration never turns your furnace or AC on or off. Your main thermostat stays in charge of the equipment. The integration only decides which zones receive air.
 
-A damper thermostat controls motorized dampers in HVAC ductwork to regulate airflow to specific zones. Unlike traditional thermostats that control the HVAC unit directly, damper thermostats work by opening and closing dampers to allow or restrict conditioned air flow to individual rooms or zones. This component creates virtual thermostats that can:
+## What is a damper thermostat?
 
-- Control multiple temperature sensors for accurate zone temperature readings
-- Manage damper actuator switches to control airflow
-- Coordinate with your main HVAC thermostat for optimal system operation
-- Implement intelligent damper management to prevent system damage
-- Support multiple HVAC modes including Heat, Cool, Auto, and Heat/Cool
+Zoned systems use motorized dampers in the ductwork to send conditioned air only to the rooms that need it. This integration creates one climate entity per zone. Each one:
 
-## Key Features
+- averages one or more temperature sensors to get the zone temperature
+- watches the main thermostat's mode (heat or cool) and its current action (heating, cooling, fan, idle)
+- closes the zone's damper once the zone has reached its target, and keeps it open otherwise
+- enforces a house-wide limit on how many dampers can be closed at once, so the blower always has enough open duct
 
-### Advanced Temperature Control
-- **Multiple Temperature Sensors**: Supports multiple temperature sensors per zone with automatic averaging
-- **Precision Control**: Configurable temperature tolerances and precision settings
-- **Dual Setpoint Support**: Heat/Cool mode with separate high and low temperature targets
-- **Temperature Limits**: Configurable minimum and maximum temperature ranges
+## Features
 
-### Intelligent Damper Management
-- **Priority-Based Control**: Manages multiple damper switches with priority ordering
-- **System Protection**: Configurable maximum number of dampers that can be closed simultaneously
-- **Smart Switching**: Automatically manages damper states to prevent HVAC system damage
+- **Multiple sensors per zone**: temperature (required) and humidity (optional) are averaged across all selected sensors. Sensors that are unavailable or report non-numeric values are skipped.
+- **Five modes**: Heat, Cool, Heat/Cool (two setpoints), Auto and Off.
+- **Coordination with the main thermostat**: a zone closes its damper if its mode conflicts with the main system's mode, for example a Cool zone while the main thermostat is heating.
+- **Fan behavior**: separate Heat Fan Mode and Cold Fan Mode settings (`Auto`, `Smart`, `Off`) decide what the damper does when the main system is only running the fan.
+- **Reverse Heat/Cool Range**: a per-zone toggle that swaps which Heat/Cool setpoint is used for heating and which for cooling.
+- **Damper limit with priorities**: a global priority list of every damper and a maximum number that may be closed at the same time.
+- **State persistence**: setpoints, mode, the reverse toggle and the fan modes survive restarts.
+- **UI setup only**: everything is configured from **Settings → Devices & Services**. There is no YAML configuration.
 
-### Main Thermostat Integration
-- **Coordinated Operation**: Works in harmony with your main HVAC thermostat
-- **Action Mirroring**: Follows main thermostat's heating/cooling actions
-- **Intelligent Logic**: Only operates dampers when main system is actively heating/cooling
+## Requirements
 
-### Multiple HVAC Modes
-- **Heat Mode**: Opens dampers when zone needs heating and main system is heating
-- **Cool Mode**: Opens dampers when zone needs cooling and main system is cooling  
-- **Auto Mode**: Keeps dampers open, letting main thermostat control the system
-- **Heat/Cool Mode**: Dual setpoint control with separate heating and cooling targets
-- **Off Mode**: Closes dampers completely
+- Home Assistant **2026.11.0** or newer
+- A main thermostat (`climate.*` entity) that reports its mode as `heat` or `cool` and its current action in the `hvac_action` attribute
+- One `switch.*` entity per damper (on = open, off = closed)
+- At least one temperature sensor per zone (`sensor.*` with device class `temperature`)
+- Optional: humidity sensors (`sensor.*` with device class `humidity`)
 
-### Enhanced Features
-- **Humidity Monitoring**: Optional humidity sensor integration
-- **State Persistence**: Remembers all settings across Home Assistant restarts
-- **Easy Configuration**: User-friendly config flow with options for post-setup changes
+Temperatures are handled in **°F**.
 
 ## Installation
 
-### HACS (Recommended)
+### HACS (recommended)
 
-1. Open HACS in your Home Assistant instance
-2. Go to "Integrations"
-3. Click the three dots in the top right corner
-4. Select "Custom repositories"
-5. Add `https://github.com/ssalahi/damper-thermostat` as a custom repository
-6. Select "Integration" as the category
-7. Click "Add"
-8. Find "Damper Thermostat" in the integration list and install it
-9. Restart Home Assistant
+1. Open **HACS** in Home Assistant.
+2. Open the menu (⋮) in the top right and choose **Custom repositories**.
+3. Add `https://github.com/ssalahi/damper-thermostat` with the type **Integration**.
+4. Search for **Damper Thermostat**, open it, and click **Download**.
+5. Restart Home Assistant.
 
-### Manual Installation
+### Manual
 
-1. Download the latest release from the [releases page](https://github.com/ssalahi/damper-thermostat/releases)
-2. Extract the contents
-3. Copy the `custom_components/damper_thermostat` folder to your Home Assistant `custom_components` directory
-4. Restart Home Assistant
+1. Download or clone this repository.
+2. Copy `custom_components/damper_thermostat` into your Home Assistant `config/custom_components/` folder. Or run the install script from the repository root:
+   ```bash
+   ./install.sh /path/to/homeassistant/config
+   ```
+3. Restart Home Assistant.
 
 ## Configuration
 
-### Prerequisites
+Setup has two parts: one **Global Settings** entry shared by the whole house, then one entry per **zone**. Both are added the same way: **Settings → Devices & Services → + Add Integration → Damper Thermostat**.
 
-Before setting up the integration, ensure you have:
+### Step 1: Global Settings (first time only)
 
-1. **Temperature Sensors**: One or more temperature sensor entities for each zone
-2. **Damper Actuator Switches**: Switch entities that control your damper motors
-3. **Main Thermostat** (recommended): Your primary HVAC thermostat entity
-4. **Humidity Sensor** (optional): Humidity sensor entity for the zone
+The first time you add the integration, it asks for the Global Settings. Every later **Add Integration** creates a zone.
 
-### Adding a Damper Thermostat
+| Field | Required | Description | Default | Allowed |
+|-------|----------|-------------|---------|---------|
+| Global Actuator Switches List (Priority Order) | Yes | Every damper switch in the house, in priority order. The first one listed has the highest priority. | – | switch entities |
+| Global Maximum Switches Off Limit | No | The most dampers that may be closed at the same time | 3 | 1–10 |
+| Global Minimum Temperature | No | The lowest setpoint the zone thermostats allow | 60°F | 40–80 |
+| Global Maximum Temperature | No | The highest setpoint the zone thermostats allow | 80°F | 50–100 |
 
-1. Go to **Settings** → **Devices & Services**
-2. Click **"+ ADD INTEGRATION"**
-3. Search for and select **"Damper Thermostat"**
-4. Fill out the configuration form:
+The minimum must be lower than the maximum.
 
-#### Required Configuration
-- **Name**: Descriptive name for your zone (e.g., "Living Room Zone", "Master Bedroom")
-- **Temperature Sensor(s)**: Select one or more temperature sensors for the zone
-- **Actuator Switch**: Select the switch entity that controls the damper motor
-- **Main Thermostat**: Select your main HVAC thermostat for coordination
-- **Actuator Switches List**: List of all damper switches in your system (for priority management)
-- **Max Switches Off**: Maximum number of dampers that can be closed simultaneously
+### Step 2: Add a zone
 
-#### Optional Configuration
-- **Humidity Sensor**: Select a humidity sensor for the zone
-- **Cold/Hot Tolerance**: How far past the target the zone may go before its damper closes (cold while cooling, hot while heating)
-- **Temperature Limits**: Minimum and maximum settable temperatures
-- **Initial Settings**: Starting target temperature and HVAC mode
+| Field | Required | Description | Default | Allowed |
+|-------|----------|-------------|---------|---------|
+| Name | Yes | Zone name, which also becomes the device name | – | |
+| Temperature Sensor(s) | Yes | One or more sensors. Their average is the zone temperature. | – | temperature sensors |
+| Humidity Sensor (Optional) | No | One or more sensors. Their average is shown as the zone humidity; it is not used for control. | – | humidity sensors |
+| Main Thermostat | Yes | The thermostat that runs your HVAC equipment | – | climate entity |
+| Actuator Switch | Yes | The damper switch or switches for this zone. Each one must already be in the global list. | – | switch entities |
+| Cold Tolerance | No | While cooling, how far below the target the zone must drop before its damper closes | 0.5°F | 0.1–10 |
+| Hot Tolerance | No | While heating, how far above the target the zone must rise before its damper closes | 0.5°F | 0.1–10 |
+| Initial Target Temperature | No | Starting setpoint for Heat and Cool modes | 74°F | 50–80 |
+| Target Temperature Low | No | Starting low setpoint for Heat/Cool mode | 72°F | 40–80 |
+| Target Temperature High | No | Starting high setpoint for Heat/Cool mode | 76°F | 50–99 |
+| Initial HVAC Mode | No | The mode the zone starts in | Auto | heat, cool, auto, heat_cool, off |
 
-### Configuration Options
+The low setpoint must be lower than the high setpoint. A set of damper switches can belong to only one zone. Adding a second zone with the same switches is rejected as "already configured".
 
-| Option | Required | Description | Default |
-|--------|----------|-------------|---------|
-| Name | Yes | Zone name | - |
-| Temperature Sensor(s) | Yes | Temperature sensor entity ID(s) | - |
-| Humidity Sensor | No | Humidity sensor entity ID | - |
-| Actuator Switch | Yes | Damper switch entity ID | - |
-| Main Thermostat | Yes | Main HVAC thermostat entity ID | - |
-| Actuator Switches | Yes | List of all damper switches for priority management | - |
-| Max Switches Off | Yes | Maximum dampers that can be closed | 3 |
-| Cold Tolerance | No | While cooling, how far below the target the zone must drop before its damper closes | 0.5°F |
-| Hot Tolerance | No | While heating, how far above the target the zone must rise before its damper closes | 0.5°F |
-| Min/Max Temperature | No | Temperature range limits | 60-80°F |
-| Initial Target Temperature | No | Starting target temperature | 74°F |
-| Initial HVAC Mode | No | Starting HVAC mode | Off |
+The initial target temperatures and mode apply only when the zone is first created. After that, change them on the thermostat card. The zone remembers them across restarts.
 
-## How It Works
+### Changing settings later
 
-### Standalone Operation
-When no main thermostat is configured, the damper thermostat operates independently:
-- **Heat Mode**: Opens damper when zone temperature < (target - cold tolerance)
-- **Cool Mode**: Opens damper when zone temperature > (target + hot tolerance)
-- **Auto Mode**: Automatically switches between heating and cooling logic
-- **Heat/Cool Mode**: Uses separate high/low setpoints for dual-zone comfort
+Open **Settings → Devices & Services → Damper Thermostat**, pick the entry, and click **Configure**.
 
-### Coordinated Operation
-When a main thermostat is configured, the damper thermostat coordinates intelligently:
-- Monitors main thermostat's current action (heating/cooling/idle)
-- Only opens dampers when main system is actively heating/cooling AND zone needs conditioning
-- Respects local temperature conditions and tolerances
-- Prevents unnecessary damper operation when main system is idle
+- **Global Settings**: all four fields can be changed. Every zone reloads automatically and picks up the new values.
+- **A zone**: you can change the name, temperature sensors, humidity sensors (clear the field to remove them), main thermostat, actuator switches, and cold and hot tolerance. The zone reloads after you save.
 
-### Priority Management
-When multiple damper thermostats are configured with the actuator switches list:
-- Maintains a priority order for damper operation
-- Ensures minimum number of dampers remain open to prevent system damage
-- Automatically manages damper switching to maintain system balance
-- Higher priority zones get preference when damper limits are reached
+Setpoints and mode are changed on the thermostat card. The reverse toggle and the fan modes are entities on the zone's device page (see below).
 
-## Usage Examples
+## Entities created per zone
 
-### Basic Zone Control
-```yaml
-# Example: Living room zone with single temperature sensor
-Name: "Living Room Zone"
-Temperature Sensor: sensor.living_room_temperature
-Actuator Switch: switch.living_room_damper
-Main Thermostat: climate.main_hvac
+All of these belong to the zone's device:
+
+| Entity | Type | Category | Purpose |
+|--------|------|----------|---------|
+| *Zone name* | Climate | – | The zone thermostat |
+| Reverse Heat/Cool Range | Switch | Configuration | Swaps which Heat/Cool setpoint is used for heating and which for cooling |
+| Heat Fan Mode | Select | Configuration | Damper behavior while the main system is in Heat mode but only running the fan |
+| Cold Fan Mode | Select | Configuration | Damper behavior while the main system is in Cool mode but only running the fan |
+| Actuator Switch | Sensor | Diagnostic | `Open` if any of the zone's damper switches is on, otherwise `Close` |
+| Cold Tolerance | Sensor | Diagnostic | The configured cold tolerance |
+| Hot Tolerance | Sensor | Diagnostic | The configured hot tolerance |
+
+The climate entity also exposes `actuator_switch`, `cold_tolerance` and `hot_tolerance` as attributes. Its **action** (heating, cooling, idle and so on) copies the main thermostat's action.
+
+## How it works
+
+The zone re-checks its damper whenever any of these change: a zone sensor, the main thermostat, the zone's damper switch (when someone else changes it), a setpoint, the mode, the reverse toggle, or a fan mode. Nothing happens until the zone has its first temperature reading.
+
+By default the damper is **open**. It is closed when any of the conditions below applies. The one exception is **Auto** mode, where the damper always stays open.
+
+### Modes
+
+In the table, *T* is the zone temperature (the sensor average).
+
+| Zone mode | Damper closes when |
+|-----------|--------------------|
+| **Heat** | The main system is heating (or preheating) and T ≥ target + hot tolerance. Also whenever the main thermostat is in **Cool** mode. |
+| **Cool** | The main system is cooling and T ≤ target − cold tolerance. Also whenever the main thermostat is in **Heat** mode. |
+| **Heat/Cool** | The main thermostat is in Heat mode and heating, and T ≥ low + hot tolerance. Or the main thermostat is in Cool mode and cooling, and T ≤ high − cold tolerance. With **Reverse Heat/Cool Range** on, the setpoints swap: heating runs until T ≥ high + hot tolerance, and cooling until T ≤ low − cold tolerance. |
+| **Auto** | Never. The damper stays open and the main thermostat decides everything. The card shows the main thermostat's target, and the zone target can't be changed in this mode. |
+| **Off** | Switching to Off closes the damper once. After that the zone leaves its damper alone until you pick another mode. |
+
+The damper also stays open while the main system is idle (unless one of the rules above applies). It reopens as soon as the closing condition stops being true. There is no extra gap between the close and reopen points.
+
+### Fan behavior
+
+When the main thermostat is in **Heat** mode but its action is `fan`, **Heat Fan Mode** applies. When it is in **Cool** mode with action `fan`, **Cold Fan Mode** applies.
+
+| Fan mode | Damper |
+|----------|--------|
+| **Auto** | The fan setting adds no rule of its own. The other rules still apply. |
+| **Off** | Closes while only the fan is running. |
+| **Smart** | Closes only if the zone is already warm enough (Heat Fan Mode) or cool enough (Cold Fan Mode). This uses the same thresholds as Heat/Cool mode, including the reverse toggle. |
+
+Smart always compares against the zone's Heat/Cool **low and high setpoints**, even when the zone is in Heat or Cool mode. A zone in Auto mode ignores the fan settings and stays open.
+
+### Damper limit and priority
+
+The global list sets the priority of each damper (first = highest), and **Global Maximum Switches Off Limit** caps how many can be closed at once. When a zone wants to close its damper:
+
+1. If fewer dampers than the limit are closed, it closes.
+2. Otherwise, it looks for a closed damper with **lower** priority than its own, starting from the bottom of the list. It opens that damper first, then closes its own.
+3. If there is no lower-priority damper to open, the damper stays open.
+
+So higher-priority zones can always close, at the cost of lower-priority zones. The number of closed dampers is meant to never go above the limit.
+
+### Example
+
+Global Settings:
+
+```text
+Global Actuator Switches List:
+  1. switch.master_bedroom_damper   (highest priority)
+  2. switch.living_room_damper
+  3. switch.guest_bedroom_damper    (lowest priority)
+Global Maximum Switches Off Limit: 2
 ```
 
-### Multi-Sensor Zone
-```yaml
-# Example: Large zone with multiple temperature sensors
-Name: "Open Floor Plan"
-Temperature Sensors: 
-  - sensor.kitchen_temperature
-  - sensor.dining_room_temperature
-  - sensor.living_room_temperature
-Actuator Switch: switch.main_floor_damper
+Zone:
+
+```text
+Name:                 Master Bedroom
+Temperature Sensor(s): sensor.master_bedroom_temperature, sensor.master_bedroom_temperature_2
+Humidity Sensor:      sensor.master_bedroom_humidity
+Main Thermostat:      climate.main_hvac
+Actuator Switch:      switch.master_bedroom_damper
+Initial HVAC Mode:    heat_cool  (low 70°F, high 76°F)
 ```
 
-### Complete System Setup
-```yaml
-# Example: Full system with priority management
-Name: "Master Bedroom"
-Temperature Sensor: sensor.master_bedroom_temperature
-Humidity Sensor: sensor.master_bedroom_humidity
-Actuator Switch: switch.master_bedroom_damper
-Main Thermostat: climate.main_hvac
-Actuator Switches:
-  - switch.master_bedroom_damper    # Priority 1
-  - switch.living_room_damper       # Priority 2
-  - switch.guest_bedroom_damper     # Priority 3
-Max Switches Off: 2
-```
+Suppose the guest bedroom and living room dampers are both closed (2 of 2). When the master bedroom reaches its setpoint, it opens the guest bedroom damper and then closes its own.
 
-## Advanced Features
+## Known limitations
 
-### Heat/Cool Mode
-Perfect for zones that need both heating and cooling with different comfort ranges:
-- Set target temperature low (e.g., 72°F) for heating threshold
-- Set target temperature high (e.g., 76°F) for cooling threshold
-- Damper opens for heating when temp < 72°F and main system is heating
-- Damper opens for cooling when temp > 76°F and main system is cooling
-
-### Auto Mode
-Ideal for zones that should always receive conditioned air:
-- Keeps damper open regardless of local temperature
-- Lets main thermostat control overall system operation
-- Perfect for critical zones or areas with poor air circulation
-
-### System Protection
-The component includes several safety features:
-- Prevents all dampers from closing simultaneously
-- Manages damper priority to maintain system airflow
-- Coordinates with main thermostat to prevent conflicts
-- Includes error handling and recovery mechanisms
+- **The main thermostat should be in Heat or Cool mode.** Heat/Cool zones and the fan settings look at the main thermostat's mode. If the main thermostat runs in its own heat_cool or auto mode, they never close the damper. Also, when the main thermostat has no single target temperature, its changes don't trigger a re-check; zone sensor changes still do.
+- **The damper limit is not fully race-proof.** Switch commands are sent without waiting for them to finish. So zones that close at the same moment, or a zone with several damper switches, can briefly go over the limit.
+- **No gap between closing and reopening.** If a sensor hovers right at the threshold, the damper can open and close often.
+- **The zone's action copies the main thermostat**, even while the zone's own damper is closed.
+- **Units are fixed to °F.**
 
 ## Troubleshooting
 
-### Common Issues
+**"Actuator Switch should be added to the global list first"**
+Add the switch to **Global Actuator Switches List** (Global Settings → Configure), then add or edit the zone again.
 
-**Damper not responding**
-- Verify actuator switch entity is correct and controllable
-- Check that switch responds to manual on/off commands
-- Ensure damper motor is properly wired and powered
+**"Device is already configured"**
+Another zone already uses the same damper switch or switches.
 
-**Temperature not updating**
-- Confirm temperature sensor entities are working
-- Check sensor values in Developer Tools → States
-- Verify sensors report numeric temperature values
+**Damper doesn't move**
+- Check that the switch responds to manual on/off in **Developer Tools → Actions**.
+- Check the zone's mode. In Auto mode the damper is always open; in Off mode it isn't controlled.
+- If the damper should close but doesn't, the limit has probably been reached and no lower-priority damper can be opened. Look for "Cannot turn off actuator" in the debug log.
 
-**No coordination with main thermostat**
-- Ensure main thermostat entity ID is correct
-- Verify main thermostat reports hvac_action attribute
-- Check main thermostat is actively heating/cooling
+**Temperature doesn't update**
+Check the sensors in **Developer Tools → States**. They must report plain numbers.
 
-**Multiple dampers closing unexpectedly**
-- Review Max Switches Off setting
-- Check Actuator Switches list configuration
-- Verify priority order is correct
+**Zone doesn't react to the main thermostat**
+Make sure the main thermostat shows an `hvac_action` attribute and that its mode is `heat` or `cool` (see Known limitations).
 
-### Debug Logging
-
-Enable detailed logging by adding to `configuration.yaml`:
+### Debug logging
 
 ```yaml
 logger:
@@ -233,25 +222,26 @@ logger:
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Pull requests are welcome. CI validates the integration with [hassfest](https://github.com/home-assistant/actions).
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT. See [LICENSE](LICENSE).
 
 ## Support
 
-If you encounter any issues or have questions, please [open an issue](https://github.com/ssalahi/damper-thermostat/issues) on GitHub.
+Please [open an issue](https://github.com/ssalahi/damper-thermostat/issues) on GitHub.
 
 ## Changelog
 
-### Version 1.0.0
-- Initial release with advanced damper control
-- Multiple temperature sensor support with averaging
-- Priority-based damper management system
-- Main thermostat coordination and action mirroring
-- Support for Heat/Cool/Auto/Heat_Cool/Off modes
-- Configurable system protection limits
-- State persistence and restore functionality
-- Dynamic icons and comprehensive device information
-- HACS compatibility and easy configuration flow
+### Unreleased
+- Global Settings entry: a shared damper priority list, the damper limit, and min/max setpoints
+- Reverse Heat/Cool Range switch per zone
+- Heat Fan Mode and Cold Fan Mode selects (`Auto`, `Smart`, `Off`)
+- Diagnostic sensors for damper state and tolerances
+- Global Settings changes now take effect and reload all zones
+- A cleared humidity sensor now stays removed
+- Minimum Home Assistant version raised to 2026.11.0
+
+### 1.0.0
+- Initial release: multi-sensor averaging, main thermostat coordination, priority-based damper limit, Heat/Cool/Auto/Heat-Cool/Off modes, state restore, UI configuration

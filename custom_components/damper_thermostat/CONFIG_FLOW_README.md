@@ -1,144 +1,107 @@
 # Damper Thermostat Config Flow
 
-This document describes the configuration flow for the Damper Thermostat integration, which has been updated to follow Home Assistant best practices.
+Developer notes for [config_flow.py](config_flow.py). For end-user setup instructions, see the repository [README](../../README.md).
 
 ## Overview
 
-The config flow allows users to configure the Damper Thermostat integration through the Home Assistant UI, eliminating the need for YAML configuration.
+All configuration is done through the UI; there is no YAML setup. A single config flow creates two kinds of entries under the `damper_thermostat` domain:
 
-## Features
+| Entry | `entry.data["entry_type"]` | Unique ID | Title | Count |
+|-------|---------------------------|-----------|-------|-------|
+| Global Settings | `"global_settings"` | `damper_thermostat_global_settings` | "Global Settings" | exactly one |
+| Zone (device) | *(not set)* | `<actuator switch IDs joined by "_">_damper_thermostat` | the zone name | one per zone |
 
-- **User-friendly setup**: Step-by-step configuration through the Home Assistant UI
-- **Entity validation**: Automatically validates that configured entities exist
-- **Temperature range validation**: Ensures logical temperature ranges
-- **Options flow**: Allows users to modify configuration after initial setup
-- **Unique ID handling**: Prevents duplicate configurations
-- **Comprehensive error handling**: Clear error messages for validation failures
+`DamperThermostatConfigFlow` (`VERSION = 1`, `MINOR_VERSION = 1`) handles creation. `DamperThermostatOptionsFlow` (an `OptionsFlowWithReload`) handles edits.
 
-## Configuration Options
+## Config flow steps
 
-### Required Options
-- **Name**: A friendly name for the damper thermostat
-- **Temperature Sensor**: One or more temperature sensors (supports multiple sensors)
-- **Actuator Switch**: The switch that controls the damper
+### `async_step_user`
 
-### Optional Options
-- **Humidity Sensor**: Optional humidity sensor for enhanced control
-- **Main Thermostat**: Optional main thermostat for coordination
-- **Cold Tolerance**: While cooling, how far below the target the zone must drop before its damper closes (default: 0.5°F)
-- **Hot Tolerance**: While heating, how far above the target the zone must rise before its damper closes (default: 0.5°F)
-- **Minimum Temperature**: Lower temperature limit (default: 60°F)
-- **Maximum Temperature**: Upper temperature limit (default: 80°F)
-- **Initial Target Temperature**: Starting target temperature (default: 74°F)
-- **Target Temperature Low**: Low temperature for range mode (default: 72°F)
-- **Target Temperature High**: High temperature for range mode (default: 76°F)
-- **Initial HVAC Mode**: Starting HVAC mode (default: AUTO)
+This step decides where the user goes. If no Global Settings entry exists yet, it forwards to `async_step_global_settings`. Otherwise it forwards to `async_step_device`.
 
-## Validation Rules
+### `async_step_global_settings` (step id `global_settings`)
 
-The config flow includes several validation checks:
+Schema `GLOBAL_SETTINGS_SCHEMA`:
 
-1. **Entity Existence**: All configured entities must exist in Home Assistant
-2. **Temperature Ranges**: 
-   - Minimum temperature must be less than maximum temperature
-   - Target temperatures must be within the min/max range
-   - Low/high temperature range must be logical
-3. **Tolerance Values**: Must be between 0.1°F and 10.0°F
+| Key | Required | Selector / type | Default | Range |
+|-----|----------|-----------------|---------|-------|
+| `global_actuator_switches` | Yes | switch entities, multiple, **ordered by priority** (index 0 = highest) | – | – |
+| `global_max_switches_off` | No | int | 3 | 1–10 |
+| `global_min_temp` | No | float | 60 | 40–80 |
+| `global_max_temp` | No | float | 80 | 50–100 |
 
-## Error Messages
+- Validation: `global_min_temp < global_max_temp`. Otherwise the error is `min_temp_must_be_less_than_max_temp`.
+- Before saving, it sets `entry_type = "global_settings"` and the fixed unique ID. If the entry already exists, the flow aborts with `already_configured`.
 
-The integration provides clear error messages for common issues:
+### `async_step_device` (step id `device`)
 
-- `entity_not_found`: The specified entity doesn't exist
-- `min_temp_must_be_less_than_max_temp`: Temperature range is invalid
-- `target_temp_out_of_range`: Target temperature is outside allowed range
-- `temp_low_must_be_less_than_temp_high`: Temperature range is invalid
-- `temp_range_out_of_bounds`: Temperature range exceeds limits
+Schema `STEP_USER_DATA_SCHEMA`:
 
-## Usage
+| Key | Required | Selector / type | Default | Range |
+|-----|----------|-----------------|---------|-------|
+| `name` | Yes | string | – | – |
+| `temperature_sensor` | Yes | sensor, device class `temperature`, multiple | – | – |
+| `humidity_sensor` | No | sensor, device class `humidity`, multiple | – | – |
+| `main_thermostat` | Yes | climate entity | – | – |
+| `actuator_switch` | Yes | switch entities, multiple | – | – |
+| `cold_tolerance` | No | float | 0.5 | 0.1–10 |
+| `hot_tolerance` | No | float | 0.5 | 0.1–10 |
+| `target_temp` | No | float | 74 | 50–80 |
+| `target_temp_low` | No | float | 72 | 40–80 |
+| `target_temp_high` | No | float | 76 | 50–99 |
+| `initial_hvac_mode` | No | dropdown: heat, cool, auto, heat_cool, off | auto | – |
 
-### Initial Setup
+Validation:
+- `target_temp_low < target_temp_high`. Otherwise the error is `temp_low_must_be_less_than_temp_high`.
+- Every `actuator_switch` must be in the global priority list. Otherwise the error is `actuator_switch_not_in_global` (from `check_inside_global_actuator_switches`).
+- The unique ID comes from the selected switches. Reusing the same set aborts with `already_configured`.
 
-1. Go to **Settings** > **Devices & Services**
-2. Click **+ Add Integration**
-3. Search for "Damper Thermostat"
-4. Fill in the required configuration
-5. Click **Submit**
+The target temperatures and initial mode are only starting values. Once the climate entity has run, it restores its setpoints and mode from the last saved state.
 
-### Modifying Configuration
+## Options flow
 
-1. Go to **Settings** > **Devices & Services**
-2. Find your Damper Thermostat integration
-3. Click **Configure**
-4. Modify the desired settings
-5. Click **Submit**
+`async_step_init` sends the user to the step that matches the entry type.
 
-## Technical Implementation
+### `async_step_global_settings`
 
-### Class Structure
+This step uses the same schema and validation as the config step, pre-filled with `{**entry.data, **entry.options}`, and saves the result to `entry.options`.
 
-- `DamperThermostatConfigFlow`: Main configuration flow handler
-- `DamperThermostatOptionsFlow`: Options flow handler for configuration updates
+`OptionsFlowWithReload` then reloads the Global Settings entry. `async_setup_entry` in [__init__.py](__init__.py) does three things with it:
+- merges `data` and `options` into `hass.data[DOMAIN]["global_settings"]`
+- schedules a reload of every loaded zone entry, because zone entities read global settings only when they are created
+- handles unloading the global entry, which returns `True` without unloading platforms because it never forwarded any
 
-### Key Methods
+### `async_step_device`
 
-- `async_step_user()`: Handles the main configuration step
-- `async_get_options_flow()`: Returns the options flow handler
-- `_get_options_schema()`: Generates the options form schema
+Schema `OPTIONS_SCHEMA`. The editable keys are `name`, `temperature_sensor`, `humidity_sensor`, `main_thermostat`, `actuator_switch`, `cold_tolerance` and `hot_tolerance`.
 
-### Version Handling
+- It runs the same `actuator_switch_not_in_global` check.
+- If `humidity_sensor` is missing from the input (the user cleared the field), it stores `[]`. Otherwise the entity would fall back to the sensor in `entry.data`.
+- If the name changes, it also updates the entry title.
+- The entry reloads after saving.
 
-- `VERSION = 1`: Main version for configuration entries
-- `MINOR_VERSION = 1`: Minor version for incremental updates
+The entities read every value as `options.get(key, data.get(key, default))`.
 
-### Unique ID Generation
+Settings that aren't in the options flow:
+- setpoints and HVAC mode: changed on the climate entity
+- Reverse Heat/Cool Range: a switch entity
+- Heat Fan Mode / Cold Fan Mode: select entities
 
-The integration generates unique IDs based on the configuration name to prevent duplicate entries:
-```python
-unique_id = f"{user_input[CONF_NAME]}_{DOMAIN}"
-```
+Each of these restores its last state on restart.
 
-## Testing
+## Error keys
 
-The integration includes comprehensive tests in `test_config_flow.py` that verify:
+Defined in [translations/en.json](translations/en.json):
 
-- Form display and validation
-- Successful configuration creation
-- Error handling for invalid entities
-- Temperature range validation
+| Key | Where | Meaning |
+|-----|-------|---------|
+| `min_temp_must_be_less_than_max_temp` | global (config + options) | min ≥ max |
+| `temp_low_must_be_less_than_temp_high` | device (config) | low ≥ high |
+| `actuator_switch_not_in_global` | device (config + options) | the switch isn't in the global priority list |
+| `already_configured` (abort) | both | a duplicate unique ID |
 
-## Best Practices Followed
+The translations file also defines `entity_not_found`, `invalid_name`, `target_temp_out_of_range` and `temp_range_out_of_bounds`, but the flow doesn't currently raise them.
 
-1. **Proper Class Naming**: Uses descriptive class names following Home Assistant conventions
-2. **Version Management**: Implements proper version handling for configuration entries
-3. **Error Handling**: Comprehensive validation with clear error messages
-4. **Options Flow**: Proper implementation of configuration updates
-5. **Unique IDs**: Prevents duplicate configurations
-6. **Entity Validation**: Ensures all configured entities exist
-7. **Translation Support**: Full internationalization support
-8. **Type Hints**: Proper type annotations throughout the code
+## Tests
 
-## Migration from YAML
-
-If you previously configured this integration via YAML, you can:
-
-1. Remove the YAML configuration
-2. Use the config flow to recreate the configuration
-3. The integration will automatically handle the transition
-
-## Troubleshooting
-
-### Common Issues
-
-1. **"Entity not found" errors**: Ensure all configured entities exist and are accessible
-2. **Temperature validation errors**: Check that your temperature ranges are logical
-3. **Configuration not saving**: Verify that all required fields are filled
-
-### Getting Help
-
-If you encounter issues:
-
-1. Check the Home Assistant logs for detailed error messages
-2. Verify that all configured entities exist and are working
-3. Ensure your temperature ranges are logical
-4. Check the integration's GitHub repository for known issues
+There are no automated tests yet. CI runs only [hassfest](../../.github/workflows/hassfest.yaml).

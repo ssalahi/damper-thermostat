@@ -6,7 +6,7 @@ import logging
 from typing import Any
 from types import MappingProxyType
 
-from homeassistant.components.climate import ClimateEntity
+from homeassistant.components.climate import RestoreClimate
 from homeassistant.components.climate.const import (
     ClimateEntityFeature,
     HVACAction,
@@ -29,7 +29,6 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant, callback, Event, EventStateChangedData
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
-from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 
 from .const import (
@@ -80,7 +79,7 @@ async def async_setup_entry(
     async_add_entities([DamperThermostat(hass, config, config_entry.entry_id, options)])
 
 
-class DamperThermostat(ClimateEntity, RestoreEntity):
+class DamperThermostat(RestoreClimate):
     """Representation of a Damper Thermostat device."""
 
     def __init__(self, hass: HomeAssistant, config: dict[str, Any], entry_id: str, options: MappingProxyType[str, Any] = MappingProxyType({})) -> None:
@@ -119,9 +118,9 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         # Temperature limits - use global settings
         self._attr_min_temp = get_global_setting(hass, CONF_GLOBAL_MIN_TEMP, DEFAULT_MIN_TEMP)
         self._attr_max_temp = get_global_setting(hass, CONF_GLOBAL_MAX_TEMP, DEFAULT_MAX_TEMP)
-        self._attr_target_temperature = options.get(CONF_TARGET_TEMP, config.get(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP))
-        self._attr_target_temperature_low = options.get(CONF_TARGET_TEMP_LOW, config.get(CONF_TARGET_TEMP_LOW, DEFAULT_TARGET_TEMP_LOW))
-        self._attr_target_temperature_high = options.get(CONF_TARGET_TEMP_HIGH, config.get(CONF_TARGET_TEMP_HIGH, DEFAULT_TARGET_TEMP_HIGH))
+        self._attr_native_target_temperature = options.get(CONF_TARGET_TEMP, config.get(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP))
+        self._attr_native_target_temperature_low = options.get(CONF_TARGET_TEMP_LOW, config.get(CONF_TARGET_TEMP_LOW, DEFAULT_TARGET_TEMP_LOW))
+        self._attr_native_target_temperature_high = options.get(CONF_TARGET_TEMP_HIGH, config.get(CONF_TARGET_TEMP_HIGH, DEFAULT_TARGET_TEMP_HIGH))
         self._attr_precision = DEFAULT_PRECISION
         self._attr_target_temperature_step = PRECISION_HALVES
         
@@ -129,10 +128,12 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._attr_hvac_mode = options.get(CONF_INITIAL_HVAC_MODE, config.get(CONF_INITIAL_HVAC_MODE, HVACMode.AUTO))
         
         # State variables
-        self._attr_current_temperature = None
+        self._attr_native_current_temperature = None
         self._attr_current_humidity = None
-        self._attr_hvac_action = HVACAction.OFF
-        self._attr_temperature_unit = UnitOfTemperature.FAHRENHEIT
+        # Last action reported by the main thermostat; the zone's own action
+        # is derived from it in the hvac_action property.
+        self._main_hvac_action = HVACAction.OFF
+        self._attr_native_temperature_unit = UnitOfTemperature.FAHRENHEIT
         
         # Supported features and modes
         self._attr_supported_features = SUPPORT_FLAGS
@@ -152,7 +153,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         self._cur_humidity = None
         self._temp_lock = asyncio.Lock()
         self._on_by_us = False
-        self._main_thermostat_target_temperature = self._attr_target_temperature
+        self._main_thermostat_target_temperature = self._attr_native_target_temperature
 
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added."""
@@ -187,29 +188,26 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             )
         )
 
-        # Check if we have a saved state
+        # Restore setpoints (converted to our native unit and checked against
+        # min/max) and the HVAC mode from the last saved state.
         old_state = await self.async_get_last_state()
         if old_state is not None:
-            # Restore target_temperature available
-            if old_state.attributes.get(ATTR_TEMPERATURE) is not None:
-                self._attr_target_temperature = float(old_state.attributes[ATTR_TEMPERATURE])
-
-            # Restore target_temperature_low if available
-            if old_state.attributes.get(ATTR_TARGET_TEMP_LOW) is not None:
-                self._attr_target_temperature_low = float(old_state.attributes[ATTR_TARGET_TEMP_LOW])
-
-            # Restore target_temperature_high if available
-            if old_state.attributes.get(ATTR_TARGET_TEMP_HIGH) is not None:
-                self._attr_target_temperature_high = float(old_state.attributes[ATTR_TARGET_TEMP_HIGH])
+            if (stored := await self.async_get_last_climate_data(validate_range=True)) is not None:
+                if stored.native_target_temperature is not None:
+                    self._attr_native_target_temperature = stored.native_target_temperature
+                if stored.native_target_temperature_low is not None:
+                    self._attr_native_target_temperature_low = stored.native_target_temperature_low
+                if stored.native_target_temperature_high is not None:
+                    self._attr_native_target_temperature_high = stored.native_target_temperature_high
 
             if old_state.state and old_state.state != STATE_UNKNOWN:
                 self._attr_hvac_mode = HVACMode(old_state.state)
 
         else:
             # No previous state, set some defaults
-            if self._attr_target_temperature is None:
-                self._attr_target_temperature = self.min_temp
-            _LOGGER.warning("No previously saved temperature, setting to %s", self._attr_target_temperature)
+            if self._attr_native_target_temperature is None:
+                self._attr_native_target_temperature = self.min_temp
+            _LOGGER.warning("No previously saved temperature, setting to %s", self._attr_native_target_temperature)
 
         # Set initial temperature and humidity
         self._async_update_temp(None)
@@ -242,7 +240,7 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
                     _LOGGER.warning("No valid temperature readings from any sensors")
                 return None
             self._cur_temp = avg_temp
-            self._attr_current_temperature = avg_temp
+            self._attr_native_current_temperature = avg_temp
         
         except Exception as ex:
             _LOGGER.error("Error updating temperature: %s", ex)
@@ -276,16 +274,16 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
 
             # Map main thermostat's hvac_action to our hvac_action
             main_action = HVACAction(state.attributes.get("hvac_action", HVACAction.OFF)) if state.attributes else HVACAction.OFF
-            self._attr_hvac_action = main_action
+            self._main_hvac_action = main_action
             # Kepp track of main thermostat's target_temperature
-            self._main_thermostat_target_temperature = float(state.attributes.get("temperature", self._attr_target_temperature))
+            self._main_thermostat_target_temperature = float(state.attributes.get("temperature", self._attr_native_target_temperature))
             
             # Update the current thermostat's based on the main thermostat change
             task = self.hass.async_create_task(self._async_control_heating_cooling())
             task.add_done_callback(self._handle_control_task_done)
         except Exception as ex:
             _LOGGER.error("Error updating main thermostat state: %s", ex)
-            self._attr_hvac_action = HVACAction.OFF
+            self._main_hvac_action = HVACAction.OFF
 
     @callback
     def _async_sensor_changed(self, event: Event[EventStateChangedData]) -> None:
@@ -336,13 +334,13 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         """Check if we need to turn heating/cooling on or off."""
         try:
             async with self._temp_lock:
-                if not self._active and None not in (self._cur_temp, self._attr_target_temperature):
+                if not self._active and None not in (self._cur_temp, self._attr_native_target_temperature):
                     self._active = True
                     _LOGGER.info(
                         "Obtained current and target temperature. "
                         "Damper Thermostat active. %s, %s",
                         self._cur_temp,
-                        self._attr_target_temperature,
+                        self._attr_native_target_temperature,
                     )
 
                 if not self._active or self._attr_hvac_mode == HVACMode.OFF:
@@ -382,17 +380,17 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
                 if self._heat_fan_mode == FanMode.OFF:
                     should_deactivate_for_fan = True
                 elif self._heat_fan_mode == FanMode.SMART:
-                    if self._reverse_heat_cool_range and self._attr_target_temperature_high <= (self._cur_temp - self._hot_tolerance):
+                    if self._reverse_heat_cool_range and self._attr_native_target_temperature_high <= (self._cur_temp - self._hot_tolerance):
                         should_deactivate_for_fan = True
-                    elif not self._reverse_heat_cool_range and self._attr_target_temperature_low <= (self._cur_temp - self._hot_tolerance):
+                    elif not self._reverse_heat_cool_range and self._attr_native_target_temperature_low <= (self._cur_temp - self._hot_tolerance):
                         should_deactivate_for_fan = True
             if main_mode == HVACMode.COOL and main_action == HVACAction.FAN:
                 if self._cold_fan_mode == FanMode.OFF:
                     should_deactivate_for_fan = True
                 elif self._cold_fan_mode == FanMode.SMART:
-                    if self._reverse_heat_cool_range and self._attr_target_temperature_low >= (self._cur_temp + self._cold_tolerance):
+                    if self._reverse_heat_cool_range and self._attr_native_target_temperature_low >= (self._cur_temp + self._cold_tolerance):
                         should_deactivate_for_fan = True
-                    elif not self._reverse_heat_cool_range and self._attr_target_temperature_high >= (self._cur_temp + self._cold_tolerance):
+                    elif not self._reverse_heat_cool_range and self._attr_native_target_temperature_high >= (self._cur_temp + self._cold_tolerance):
                         should_deactivate_for_fan = True
             should_deactivate = should_deactivate or should_deactivate_for_fan
 
@@ -400,21 +398,21 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
             if self._attr_hvac_mode == HVACMode.HEAT_COOL:
                 if main_mode == HVACMode.COOL and main_action == HVACAction.COOLING:
                     if self._reverse_heat_cool_range:
-                        enough_cold = self._attr_target_temperature_low >= (self._cur_temp + self._cold_tolerance)
+                        enough_cold = self._attr_native_target_temperature_low >= (self._cur_temp + self._cold_tolerance)
                     else:
-                        enough_cold = self._attr_target_temperature_high >= (self._cur_temp + self._cold_tolerance)
+                        enough_cold = self._attr_native_target_temperature_high >= (self._cur_temp + self._cold_tolerance)
                 if main_mode == HVACMode.HEAT and main_action in [HVACAction.HEATING, HVACAction.PREHEATING]:
                     if self._reverse_heat_cool_range:
-                        enough_heat = self._attr_target_temperature_high <= (self._cur_temp - self._hot_tolerance)
+                        enough_heat = self._attr_native_target_temperature_high <= (self._cur_temp - self._hot_tolerance)
                     else:
-                        enough_heat = self._attr_target_temperature_low <= (self._cur_temp - self._hot_tolerance)
+                        enough_heat = self._attr_native_target_temperature_low <= (self._cur_temp - self._hot_tolerance)
             should_deactivate = should_deactivate or enough_cold or enough_heat
 
             # Handle heat and cool modes
             if self._attr_hvac_mode == HVACMode.COOL and main_action == HVACAction.COOLING:
-                enough_cold = self._attr_target_temperature >= (self._cur_temp + self._cold_tolerance)
+                enough_cold = self._attr_native_target_temperature >= (self._cur_temp + self._cold_tolerance)
             if self._attr_hvac_mode == HVACMode.HEAT and main_action in [HVACAction.HEATING, HVACAction.PREHEATING]:
-                enough_heat = self._attr_target_temperature <= (self._cur_temp - self._hot_tolerance)
+                enough_heat = self._attr_native_target_temperature <= (self._cur_temp - self._hot_tolerance)
             should_deactivate = should_deactivate or enough_cold or enough_heat
 
             # Auto mode will always keep the actuator on
@@ -431,14 +429,18 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         except Exception as ex:
             _LOGGER.error("Error in main thermostat control: %s", ex)
 
+    def _is_actuator_open(self) -> bool:
+        """Return True if any of this zone's actuator switches is on (damper open)."""
+        for actuator in self._actuator_switch_entity_ids:
+            state = self.hass.states.get(actuator)
+            if state is not None and state.state == "on":
+                return True
+        return False
+
     async def _async_is_device_active(self) -> bool:
         """Check if the actuator switch is currently on."""
         try:
-            for actuator in self._actuator_switch_entity_ids:
-                state = self.hass.states.get(actuator)
-                if state is not None and state.state == "on":
-                    return True
-            return False
+            return self._is_actuator_open()
         except Exception as ex:
             _LOGGER.error("Error checking device state: %s", ex)
             return False
@@ -561,16 +563,16 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         # Handle single temperature setpoint
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is not None and self.hvac_mode is not HVACMode.AUTO:
-            self._attr_target_temperature = temperature
+            self._attr_native_target_temperature = temperature
         
         # Handle dual temperature setpoints for AUTO and HEAT_COOL modes
         target_temp_low = kwargs.get(ATTR_TARGET_TEMP_LOW)
         if target_temp_low is not None and self.hvac_mode == HVACMode.HEAT_COOL:
-            self._attr_target_temperature_low = target_temp_low
+            self._attr_native_target_temperature_low = target_temp_low
         
         target_temp_high = kwargs.get(ATTR_TARGET_TEMP_HIGH)
         if target_temp_high is not None and self.hvac_mode == HVACMode.HEAT_COOL:
-            self._attr_target_temperature_high = target_temp_high
+            self._attr_native_target_temperature_high = target_temp_high
         
         # Only proceed if we actually got a temperature to set
         if any(temp is not None for temp in [temperature, target_temp_low, target_temp_high]):
@@ -615,27 +617,40 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         return ClimateEntityFeature.TARGET_TEMPERATURE
     
     @property
-    def target_temperature(self) -> float | None:
+    def native_target_temperature(self) -> float | None:
         """Return the temperature we try to reach."""
         if self.hvac_mode in [HVACMode.COOL, HVACMode.HEAT]:
-            return self._attr_target_temperature
+            return self._attr_native_target_temperature
         elif self.hvac_mode == HVACMode.AUTO: 
             return self._main_thermostat_target_temperature
         return None
 
     @property
-    def target_temperature_high(self) -> float | None:
+    def native_target_temperature_high(self) -> float | None:
         """Return the highbound target temperature we try to reach."""
         if self.hvac_mode in [HVACMode.HEAT_COOL]:
-            return self._attr_target_temperature_high
+            return self._attr_native_target_temperature_high
         return None
 
     @property
-    def target_temperature_low(self) -> float | None:
+    def native_target_temperature_low(self) -> float | None:
         """Return the lowbound target temperature we try to reach."""
         if self.hvac_mode in [HVACMode.HEAT_COOL]:
-            return self._attr_target_temperature_low
+            return self._attr_native_target_temperature_low
         return None
+
+    @property
+    def hvac_action(self) -> HVACAction:
+        """Return the zone's action.
+
+        Air only reaches the zone while its damper is open, so the main
+        thermostat's action is shown only then; a closed damper means idle.
+        """
+        if self._attr_hvac_mode == HVACMode.OFF:
+            return HVACAction.OFF
+        if not self._is_actuator_open():
+            return HVACAction.IDLE
+        return self._main_hvac_action
 
     @property
     def icon(self):
@@ -643,15 +658,12 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
         # Dynamic icons based on mode and action
         if self._attr_hvac_mode == HVACMode.OFF:
             return "mdi:thermostat-off"
-        elif self._attr_hvac_action == HVACAction.HEATING:
+        elif self.hvac_action == HVACAction.HEATING:
             return "mdi:fire"
-        elif self._attr_hvac_action == HVACAction.COOLING:
+        elif self.hvac_action == HVACAction.COOLING:
             return "mdi:snowflake"
         elif self._attr_hvac_mode == HVACMode.AUTO:
-            if self._attr_hvac_action == HVACAction.IDLE:
-                return "mdi:thermostat-auto"
-            else:
-                return "mdi:thermostat-auto"
+            return "mdi:thermostat-auto"
         elif self._attr_hvac_mode == HVACMode.HEAT_COOL:
             return "mdi:sun-snowflake-variant"
         elif self._attr_hvac_mode == HVACMode.HEAT:
@@ -666,15 +678,8 @@ class DamperThermostat(ClimateEntity, RestoreEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the diagnostic state attributes."""
-        actuator_status = "Close"
-        for switch_id in self._actuator_switch_entity_ids:
-            state = self.hass.states.get(switch_id)
-            if state is not None and state.state == "on":
-                actuator_status = "Open"
-                break
-
         return {
-            "actuator_switch": actuator_status,
+            "actuator_switch": "Open" if self._is_actuator_open() else "Close",
             "cold_tolerance": self._cold_tolerance,
             "hot_tolerance": self._hot_tolerance,
         }

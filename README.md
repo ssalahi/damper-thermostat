@@ -116,7 +116,10 @@ All of these belong to the zone's device:
 | Cold Tolerance | Sensor | Diagnostic | The configured cold tolerance |
 | Hot Tolerance | Sensor | Diagnostic | The configured hot tolerance |
 
-The climate entity also exposes `actuator_switch`, `cold_tolerance` and `hot_tolerance` as attributes. Its **action** (heating, cooling, idle and so on) copies the main thermostat's action.
+The climate entity also exposes `actuator_switch`, `cold_tolerance` and `hot_tolerance` as attributes. Its **action** shows what the zone itself is getting:
+- **Off**: the zone is in Off mode.
+- **Idle**: the zone's damper is closed.
+- **The main thermostat's action** (heating, cooling, fan, idle and so on): the damper is open.
 
 ## How it works
 
@@ -190,7 +193,6 @@ Suppose the guest bedroom and living room dampers are both closed (2 of 2). When
 - **The main thermostat should be in Heat or Cool mode.** Heat/Cool zones and the fan settings look at the main thermostat's mode. If the main thermostat runs in its own heat_cool or auto mode, they never close the damper. Also, when the main thermostat has no single target temperature, its changes don't trigger a re-check; zone sensor changes still do.
 - **The damper limit is not fully race-proof.** Switch commands are sent without waiting for them to finish. So zones that close at the same moment, or a zone with several damper switches, can briefly go over the limit.
 - **No gap between closing and reopening.** If a sensor hovers right at the threshold, the damper can open and close often.
-- **The zone's action copies the main thermostat**, even while the zone's own damper is closed.
 - **Units are fixed to °F.**
 
 ## Troubleshooting
@@ -237,6 +239,8 @@ Please [open an issue](https://github.com/ssalahi/damper-thermostat/issues) on G
 ### 1.0.2 (unreleased)
 - New icon (a louvered damper inside a warm/cool thermostat dial) with light and dark versions at the sizes Home Assistant expects
 - `install.sh` now installs the `translations/` and `brand/` folders and works from any directory
+- The zone's action now shows **idle** while its damper is closed, and **off** in Off mode. Before, it always copied the main thermostat's action. The icon follows the same rule.
+- Updated the climate entity to Home Assistant's `native_*` temperature API, ahead of the old one being removed in 2027.11. This removes the deprecation warnings from the log. Setpoints are now restored after a restart in the right unit, and dropped if they fall outside the min/max range.
 
 ### 1.0.1
 - Global Settings entry: a shared damper priority list, the damper limit, and min/max setpoints

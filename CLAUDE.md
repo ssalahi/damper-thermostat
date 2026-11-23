@@ -68,6 +68,10 @@ The code then turns the zone's actuators on or off only if their current state d
 
 **Closing with the airflow guard** (`_async_actuator_turn_off`): if fewer than `max_switches_off` switches in the global list are off, the damper closes. Otherwise the code looks, from the lowest-priority end, for an **off** switch with lower priority than this one. It turns that switch **on** first, then closes this one. If there is no such switch, the damper stays open. The goal is that the number of closed dampers never goes above the limit. However, service calls use `blocking=False` and each zone has its own lock, so concurrent closes, or a zone with several switches, can go over it (a known bug).
 
+The climate entity uses the **native temperature API** and is based on `RestoreClimate`. Use `_attr_native_target_temperature[_low|_high]`, `_attr_native_current_temperature` and `_attr_native_temperature_unit`, and override `native_target_temperature*`. The old non-native names are deprecated and will be removed in HA 2027.11. Setpoints are restored with `async_get_last_climate_data(validate_range=True)`; the HVAC mode comes from `async_get_last_state()`. `async_set_temperature` receives values already converted to the native unit (°F).
+
+`hvac_action` is a derived property: `off` in `off` mode, `idle` while all the zone's actuators are off, and otherwise the main thermostat's action (stored in `_main_hvac_action`). The `icon` uses the derived value.
+
 Restored on restart (`RestoreEntity`): target, low and high setpoints, HVAC mode, the reverse switch, and the fan selects.
 
 ## Known gaps / gotchas
@@ -83,9 +87,9 @@ Restored on restart (`RestoreEntity`): target, low and high setpoints, HVAC mode
   - dampers can flap between zones, because opening a lower-priority damper looks like a manual change to that zone
   - `float(None)` on the main thermostat's `temperature` attribute in its `heat_cool` mode stops re-evaluation when the main thermostat changes
   - there is no hysteresis between closing and reopening
-  - the zone's `hvac_action` copies the main thermostat even while its own damper is closed
 
 ## Dev notes
 
 - There is no build step. To test, copy the folder into an HA instance (`./install.sh /path/to/ha/config`) and restart. For debug logs, set `logger: logs: custom_components.damper_thermostat: debug`.
+- Local Home Assistant for tests: `.venv/` (gitignored) holds `homeassistant==2026.11.2` on Python 3.14. HA 2026.11 requires Python ≥ 3.14.2. Run checks with `.venv/bin/python`, and put the repo root on `sys.path` to import `custom_components.damper_thermostat`. The system `python3` is Homebrew 3.15, which doesn't have Home Assistant, so don't use it for HA tests. `uv` comes from Homebrew. To recreate the environment: `uv venv .venv --python 3.14 && uv pip install --python .venv/bin/python homeassistant==<latest>`.
 - Validation: the hassfest GitHub Action. Keep `manifest.json` keys sorted after `domain` and `name`.

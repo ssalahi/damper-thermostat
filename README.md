@@ -241,13 +241,15 @@ Please [open an issue](https://github.com/ssalahi/damper-thermostat/issues) on G
 
 ## Changelog
 
-### 1.0.2 (unreleased)
-- New icon (a louvered damper inside a warm/cool thermostat dial) with light and dark versions at the sizes Home Assistant expects
-- `install.sh` now installs the `translations/` and `brand/` folders and works from any directory
+### 1.0.3 (unreleased)
 - The zone's action now shows **idle** while its damper is closed, and **off** in Off mode. Before, it always copied the main thermostat's action. The icon follows the same rule.
 - Updated the climate entity to Home Assistant's `native_*` temperature API, ahead of the old one being removed in 2027.11. This removes the deprecation warnings from the log. Setpoints are now restored after a restart in the right unit, and dropped if they fall outside the min/max range.
 - Smart fan mode now uses the setpoint the zone shows for its mode. Before, it always used the Heat/Cool low/high setpoints, which are hidden in Heat and Cool mode.
 - Every setpoint now survives a restart in every mode. Before, low/high were lost outside Heat/Cool mode, and the single target was lost in Heat/Cool mode.
+
+### 1.0.2
+- New icon (a louvered damper inside a warm/cool thermostat dial) with light and dark versions at the sizes Home Assistant expects
+- `install.sh` now installs the `translations/` and `brand/` folders and works from any directory
 
 ### 1.0.1
 - Global Settings entry: a shared damper priority list, the damper limit, and min/max setpoints

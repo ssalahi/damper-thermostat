@@ -80,7 +80,7 @@ Restored on restart: target, low and high setpoints (`extra_restore_state_data` 
 
 - Global settings are stored as `{**entry.data, **entry.options}`. Device entities read them only once, at construction. So whenever the global entry is set up or reloaded (for example after an options edit), it schedules a reload of every device entry that is already loaded. Unloading the global entry returns early because it has no platforms.
 - `hacs.json` declares `"filename": "damper_thermostat.zip"` (release-zip install) and lists `domains: ["climate"]` only.
-- `manifest.json` `version` and `DeviceInfo.sw_version` are both `1.0.2` in code. Bump both together, and keep the README changelog in step with GitHub releases (tags look like `V1.0.1`).
+- `manifest.json` `version` and `DeviceInfo.sw_version` are both `1.0.3` in code. Bump both together, and keep the README changelog in step with GitHub releases (tags look like `V1.0.1`).
 - The select icons only distinguish `Auto` from everything else, so `Smart` shows the "off" icon.
 - `translations/en.json` lists options-flow fields (`reverse_heat_cool_range`, `heat_fan_mode`, `cold_fan_mode`) that are no longer in `OPTIONS_SCHEMA`. They moved to entities.
 - All `.md` docs were rewritten on 2026-11-21 to match the code. When behavior changes, update the README's mode, fan and damper-limit tables, its **Known limitations** section, and `CONFIG_FLOW_README.md`.

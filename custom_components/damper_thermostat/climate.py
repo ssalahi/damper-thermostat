@@ -6,7 +6,7 @@ import logging
 from typing import Any
 from types import MappingProxyType
 
-from homeassistant.components.climate import RestoreClimate
+from homeassistant.components.climate import ClimateExtraStoredData, RestoreClimate
 from homeassistant.components.climate.const import (
     ClimateEntityFeature,
     HVACAction,
@@ -379,40 +379,28 @@ class DamperThermostat(RestoreClimate):
             if main_mode == HVACMode.HEAT and main_action == HVACAction.FAN:
                 if self._heat_fan_mode == FanMode.OFF:
                     should_deactivate_for_fan = True
-                elif self._heat_fan_mode == FanMode.SMART:
-                    if self._reverse_heat_cool_range and self._attr_native_target_temperature_high <= (self._cur_temp - self._hot_tolerance):
-                        should_deactivate_for_fan = True
-                    elif not self._reverse_heat_cool_range and self._attr_native_target_temperature_low <= (self._cur_temp - self._hot_tolerance):
-                        should_deactivate_for_fan = True
+                elif self._heat_fan_mode == FanMode.SMART and self._is_warm_enough():
+                    should_deactivate_for_fan = True
             if main_mode == HVACMode.COOL and main_action == HVACAction.FAN:
                 if self._cold_fan_mode == FanMode.OFF:
                     should_deactivate_for_fan = True
-                elif self._cold_fan_mode == FanMode.SMART:
-                    if self._reverse_heat_cool_range and self._attr_native_target_temperature_low >= (self._cur_temp + self._cold_tolerance):
-                        should_deactivate_for_fan = True
-                    elif not self._reverse_heat_cool_range and self._attr_native_target_temperature_high >= (self._cur_temp + self._cold_tolerance):
-                        should_deactivate_for_fan = True
+                elif self._cold_fan_mode == FanMode.SMART and self._is_cool_enough():
+                    should_deactivate_for_fan = True
             should_deactivate = should_deactivate or should_deactivate_for_fan
 
             # Handle heat_cool mode
             if self._attr_hvac_mode == HVACMode.HEAT_COOL:
                 if main_mode == HVACMode.COOL and main_action == HVACAction.COOLING:
-                    if self._reverse_heat_cool_range:
-                        enough_cold = self._attr_native_target_temperature_low >= (self._cur_temp + self._cold_tolerance)
-                    else:
-                        enough_cold = self._attr_native_target_temperature_high >= (self._cur_temp + self._cold_tolerance)
+                    enough_cold = self._is_cool_enough()
                 if main_mode == HVACMode.HEAT and main_action in [HVACAction.HEATING, HVACAction.PREHEATING]:
-                    if self._reverse_heat_cool_range:
-                        enough_heat = self._attr_native_target_temperature_high <= (self._cur_temp - self._hot_tolerance)
-                    else:
-                        enough_heat = self._attr_native_target_temperature_low <= (self._cur_temp - self._hot_tolerance)
+                    enough_heat = self._is_warm_enough()
             should_deactivate = should_deactivate or enough_cold or enough_heat
 
             # Handle heat and cool modes
             if self._attr_hvac_mode == HVACMode.COOL and main_action == HVACAction.COOLING:
-                enough_cold = self._attr_native_target_temperature >= (self._cur_temp + self._cold_tolerance)
+                enough_cold = self._is_cool_enough()
             if self._attr_hvac_mode == HVACMode.HEAT and main_action in [HVACAction.HEATING, HVACAction.PREHEATING]:
-                enough_heat = self._attr_native_target_temperature <= (self._cur_temp - self._hot_tolerance)
+                enough_heat = self._is_warm_enough()
             should_deactivate = should_deactivate or enough_cold or enough_heat
 
             # Auto mode will always keep the actuator on
@@ -428,6 +416,32 @@ class DamperThermostat(RestoreClimate):
                 await self._async_actuators_turn_on()
         except Exception as ex:
             _LOGGER.error("Error in main thermostat control: %s", ex)
+
+    def _heat_target(self) -> float | None:
+        """Setpoint the zone heats toward in its current mode."""
+        if self._attr_hvac_mode == HVACMode.HEAT_COOL:
+            if self._reverse_heat_cool_range:
+                return self._attr_native_target_temperature_high
+            return self._attr_native_target_temperature_low
+        return self._attr_native_target_temperature
+
+    def _cool_target(self) -> float | None:
+        """Setpoint the zone cools toward in its current mode."""
+        if self._attr_hvac_mode == HVACMode.HEAT_COOL:
+            if self._reverse_heat_cool_range:
+                return self._attr_native_target_temperature_low
+            return self._attr_native_target_temperature_high
+        return self._attr_native_target_temperature
+
+    def _is_warm_enough(self) -> bool:
+        """True once the zone is at least hot_tolerance above its heating setpoint."""
+        target = self._heat_target()
+        return target is not None and self._cur_temp is not None and target <= self._cur_temp - self._hot_tolerance
+
+    def _is_cool_enough(self) -> bool:
+        """True once the zone is at least cold_tolerance below its cooling setpoint."""
+        target = self._cool_target()
+        return target is not None and self._cur_temp is not None and target >= self._cur_temp + self._cold_tolerance
 
     def _is_actuator_open(self) -> bool:
         """Return True if any of this zone's actuator switches is on (damper open)."""
@@ -638,6 +652,22 @@ class DamperThermostat(RestoreClimate):
         if self.hvac_mode in [HVACMode.HEAT_COOL]:
             return self._attr_native_target_temperature_low
         return None
+
+    @property
+    def extra_restore_state_data(self) -> ClimateExtraStoredData:
+        """Save every setpoint, not just the ones visible in the current mode.
+
+        The default only stores low/high while the range feature is active and
+        the single target only when it is shown, so switching modes and
+        restarting would reset the hidden setpoints to their setup values.
+        """
+        return ClimateExtraStoredData(
+            native_current_temperature=self._attr_native_current_temperature,
+            native_target_temperature=self._attr_native_target_temperature,
+            native_target_temperature_high=self._attr_native_target_temperature_high,
+            native_target_temperature_low=self._attr_native_target_temperature_low,
+            native_temperature_unit=self.native_temperature_unit,
+        )
 
     @property
     def hvac_action(self) -> HVACAction:

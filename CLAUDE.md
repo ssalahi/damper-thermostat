@@ -56,7 +56,7 @@ Runs on: sensor changes, main thermostat changes, manual actuator changes (track
 - **Fan action**: the main action is `fan`:
   - Heat Fan Mode applies when the main mode is `heat`; Cold Fan Mode applies when it is `cool`.
   - `Off` closes the damper. `Auto` adds no fan rule; the other rules still apply.
-  - `Smart` closes it once the zone is already warm enough (heat) or cool enough (cool), using the `heat_cool` thresholds below. It **always uses `target_temp_low`/`target_temp_high`**, even when the zone is in `heat` or `cool` mode. That is probably a bug, since those values aren't visible in those modes.
+  - `Smart` closes it once `_is_warm_enough()` (heat) or `_is_cool_enough()` (cool) is true. These use the same mode-aware setpoint as the rules below.
 - **`heat_cool` zone**:
   - While the main system is cooling, close when `high >= cur + cold_tol`.
   - While it is heating or preheating, close when `low <= cur - hot_tol`.
@@ -72,7 +72,9 @@ The climate entity uses the **native temperature API** and is based on `RestoreC
 
 `hvac_action` is a derived property: `off` in `off` mode, `idle` while all the zone's actuators are off, and otherwise the main thermostat's action (stored in `_main_hvac_action`). The `icon` uses the derived value.
 
-Restored on restart (`RestoreEntity`): target, low and high setpoints, HVAC mode, the reverse switch, and the fan selects.
+All warm/cool comparisons go through `_heat_target()`/`_cool_target()`: `target_temp` in `heat`/`cool` mode; in `heat_cool` mode `low`/`high`, swapped by Reverse.
+
+Restored on restart: target, low and high setpoints (`extra_restore_state_data` is overridden to save all three in every mode), HVAC mode, the reverse switch, and the fan selects.
 
 ## Known gaps / gotchas
 

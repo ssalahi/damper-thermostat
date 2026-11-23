@@ -91,7 +91,7 @@ The minimum must be lower than the maximum.
 
 The low setpoint must be lower than the high setpoint. A set of damper switches can belong to only one zone. Adding a second zone with the same switches is rejected as "already configured".
 
-The initial target temperatures and mode apply only when the zone is first created. After that, change them on the thermostat card. The zone remembers them across restarts.
+The initial target temperatures and mode apply only when the zone is first created. After that, change them on the thermostat card. The zone remembers all of its setpoints across restarts: the single target and the low/high, whichever mode it's in.
 
 ### Changing settings later
 
@@ -149,9 +149,14 @@ When the main thermostat is in **Heat** mode but its action is `fan`, **Heat Fan
 |----------|--------|
 | **Auto** | The fan setting adds no rule of its own. The other rules still apply. |
 | **Off** | Closes while only the fan is running. |
-| **Smart** | Closes only if the zone is already warm enough (Heat Fan Mode) or cool enough (Cold Fan Mode). This uses the same thresholds as Heat/Cool mode, including the reverse toggle. |
+| **Smart** | Closes only if the zone is already warm enough (Heat Fan Mode) or cool enough (Cold Fan Mode). It uses the same thresholds as the zone's mode (see the table above). |
 
-Smart always compares against the zone's Heat/Cool **low and high setpoints**, even when the zone is in Heat or Cool mode. A zone in Auto mode ignores the fan settings and stays open.
+Smart compares against the setpoint the zone shows for its mode:
+- **Heat**: warm enough at target + hot tolerance.
+- **Cool**: cool enough at target − cold tolerance.
+- **Heat/Cool**: warm enough at low + hot tolerance, cool enough at high − cold tolerance. The Reverse toggle swaps low and high.
+
+A zone in Auto mode ignores the fan settings and stays open.
 
 ### Damper limit and priority
 
@@ -241,6 +246,8 @@ Please [open an issue](https://github.com/ssalahi/damper-thermostat/issues) on G
 - `install.sh` now installs the `translations/` and `brand/` folders and works from any directory
 - The zone's action now shows **idle** while its damper is closed, and **off** in Off mode. Before, it always copied the main thermostat's action. The icon follows the same rule.
 - Updated the climate entity to Home Assistant's `native_*` temperature API, ahead of the old one being removed in 2027.11. This removes the deprecation warnings from the log. Setpoints are now restored after a restart in the right unit, and dropped if they fall outside the min/max range.
+- Smart fan mode now uses the setpoint the zone shows for its mode. Before, it always used the Heat/Cool low/high setpoints, which are hidden in Heat and Cool mode.
+- Every setpoint now survives a restart in every mode. Before, low/high were lost outside Heat/Cool mode, and the single target was lost in Heat/Cool mode.
 
 ### 1.0.1
 - Global Settings entry: a shared damper priority list, the damper limit, and min/max setpoints
